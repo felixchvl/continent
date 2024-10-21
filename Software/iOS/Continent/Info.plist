@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Marianne-Bold</string>
+		<string>Marianne-BoldItalic</string>
+		<string>Marianne-ExtraBold</string>
+		<string>Marianne-ExtraBoldItalic</string>
+		<string>Marianne-Light</string>
+		<string>Marianne-LightItalic</string>
+		<string>Marianne-Medium</string>
+		<string>Marianne-MediumItalic</string>
+		<string>Marianne-Regular</string>
+		<string>Marianne-RegularItalic</string>
+		<string>Marianne-Thin</string>
+		<string>Marianne-ThinItalic</string>
+	</array>
+</dict>
+</plist>

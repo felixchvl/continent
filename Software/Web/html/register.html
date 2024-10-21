@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continent</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,300,300italic,400italic,600' rel='stylesheet' type='text/css'>
+    <link href="//netdna.bootstrapcdn.com/font-awesome/3.1.1/css/font-awesome.css" rel="stylesheet">
+  </head>
+  <body>
+    <header>
+      <div class="desktopNav">
+        <nav>
+          <a href="index.html">
+            <img class="Logo" src="img/logo.svg" alt="Logo">
+          </a>
+          <a href="index.html">
+            <h1>Continent</h1>
+          </a>
+          <a href="https://openrailwaymap.org">Network status</a>
+          <a href="register.html">Account</a>
+          <a href="about.html">About</a>
+        </nav>
+      </div>
+      <!--  MOBILE NAV BAR -->
+      <div class="hamburger">
+        <input class="hidden" id="drawer-input" type="checkbox">
+        <label for="drawer-input" class="drawer-open">
+          <span></span>
+        </label>
+        <nav class="nav-content">
+          <ul class="items">
+            <li class="item">
+              <a href="index.html">Continent</a>
+            </li>
+            <li class="item">
+              <a href="https://openrailwaymap.org">Network status</a>
+            </li>
+            <li class="item">
+              <a href="register.html">Account</a>
+            </li>
+            <li class="item">
+              <a href="about.html">About</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+    <hr>
+    <div class="main">
+      <div class="loginBox">
+        <h1>Registration</h1>
+        <form action="/">
+          <hr>
+          <label for="email">
+            <i class="icon-envelope "></i>
+          </label>
+          <input class="accountInput" type="text" name="name" id="email" placeholder="Email" required />
+          <label for="registerName">
+            <i class="icon-user"></i>
+          </label>
+          <input class="accountInput" type="text" name="name" id="registerName" placeholder="Name" required />
+          <label for="password">
+            <i class="icon-shield"></i>
+          </label>
+          <input class="accountInput" type="password" name="name" id="password" placeholder="Password" required />
+          <p id="beforeTermsText" class="loginP">By clicking Register, you agree on our <a class="termsText" href="#">terms and condition.</a>
+          </p>
+          <a href="#" class="button" onClick="auth()">Register</a>
+        </form>
+      </div>
+    </div>
+    <footer>
+      <div class="txtFooter">Laurens & Chevalier Associates</div>
+    </footer>
+    <script src="../js/account.js"></script>
+  </body>
+</html>
