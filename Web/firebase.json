@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "/Users/felixchevalier/ContinentWeb",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}
