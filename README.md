@@ -25,8 +25,8 @@ npm run dev
 ## Stack
 
 - React + Vite + TypeScript.
-- Mapbox GL JS for the base map (style built in code from the design tokens, on Mapbox Streets tiles).
-- deck.gl for the rail network and the trains, interleaved under the city names.
+- Mapbox GL JS for the quiet base map (style built in code from the design tokens, on Mapbox Streets tiles).
+- deck.gl for the rail network, the trains, the selected route and the city names (in Halyard).
 - Plain CSS with variables (`web/src/styles/tokens.css`), light and dark.
 
 ## Design
