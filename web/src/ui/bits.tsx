@@ -1,27 +1,13 @@
-// Small shared pieces: status and source badges, icon buttons.
+// Small shared pieces. No badges: status is written, and only a delay takes colour (red).
 
 import type { ReactNode } from 'react'
-import type { Source, Statut } from '../data/live'
-import { delayLabel } from '../lib/format'
+import type { Pos } from '../data/live'
 import { Icon, type IconName } from './Icon'
 
-export function StatusBadge({ statut, delay, rt = true }: { statut: Statut; delay: number; rt?: boolean }) {
-  if (!rt) return <span className="badge badge-theorique t-label-s">Horaire théorique</span>
-  return (
-    <span className={`badge badge-${statut} t-label-s`}>
-      <i className="pastille" />
-      {delayLabel(delay)}
-    </span>
-  )
-}
-
-export function SourceBadge({ source }: { source: Source }) {
-  return (
-    <span className="badge badge-source t-label-s" title={source === 'gps' ? 'Position GPS transmise par le train' : 'Position calculée à partir des horaires et des retards'}>
-      <Icon name={source === 'gps' ? 'gps' : 'estimation'} size={14} />
-      {source === 'gps' ? 'GPS' : 'Estimée'}
-    </span>
-  )
+export function Retard({ pos }: { pos: Pick<Pos, 'delay' | 'rt'> }) {
+  if (!pos.rt) return <span className="secondaire">Horaire théorique</span>
+  if (pos.delay < 1) return <span>À l'heure</span>
+  return <span className="retard">+{Math.round(pos.delay)} min</span>
 }
 
 export function IconButton({ icon, label, onClick, active, disabled, children }: {
@@ -34,3 +20,6 @@ export function IconButton({ icon, label, onClick, active, disabled, children }:
     </button>
   )
 }
+
+/** Operator mark: a short bar in the operator's colour, like the line on the timeline. */
+export const Trait = ({ color }: { color: string }) => <i className="trait-compagnie" style={{ background: color }} />

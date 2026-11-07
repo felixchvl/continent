@@ -1,14 +1,19 @@
-// Left panel of the Europe view (mockup "01 — Carte Europe"): live counters, filters,
-// search, followed trains, legend and sources.
+// Europe view panel, in the manner of the mockup's "Home menu": a plain white sheet, big
+// numbers with their unit underneath, hairlines, outlined buttons, and the operators listed
+// by their colour.
 
 import { useEffect, useRef } from 'react'
 import type { Filters, Shown } from '../map/MapView'
-import { hhmm, nombre } from '../lib/format'
+import type { Operator } from '../data/operators'
+import { compte, heure, nombre } from '../lib/format'
 import { Icon, Logo } from './Icon'
-import { StatusBadge } from './bits'
+import { Retard, Trait } from './bits'
 import type { FollowedTrain } from '../useFollowed'
 
-export type Stats = { total: number; ok: number; r1: number; r2: number; gps: number; gv: number; cl: number; estimee: number }
+export type Stats = {
+  total: number; ok: number; r1: number; r2: number; gps: number; gv: number; cl: number; estimee: number
+  ops: { op: Operator; n: number }[]
+}
 
 type Props = {
   clock: number
@@ -38,121 +43,129 @@ export function Panel(p: Props) {
 
   const s = p.stats
   const pct = s.total ? Math.round((s.ok / s.total) * 100) : 0
-  const toggle = (k: keyof Filters) => p.onFilters({ ...p.filters, [k]: !p.filters[k] })
-  const chip = (k: keyof Filters, label: string, n: number) => (
-    <button type="button" className={`puce${p.filters[k] ? ' active' : ''}`} onClick={() => toggle(k)} aria-pressed={p.filters[k]}>
-      <span className="t-label-m">{label}</span>
-      <span className="t-chiffres-s">{nombre(n)}</span>
+  const f = p.filters
+  const toggle = (k: 'gv' | 'cl' | 'gps' | 'estimee') => p.onFilters({ ...f, [k]: !f[k] })
+  const bouton = (k: 'gv' | 'cl' | 'gps' | 'estimee', label: string) => (
+    <button type="button" className={`bouton t-corps${f[k] ? ' actif' : ''}`} onClick={() => toggle(k)} aria-pressed={f[k]}>
+      {label}
     </button>
   )
+  const statusText =
+    p.status === 'offline' ? 'Hors ligne' : p.status === 'loading' ? 'Connexion…' : p.status === 'stale' ? `Données de ${heure(p.clock)}` : `En direct, ${heure(p.clock)}`
 
   return (
-    <aside className="panneau verre">
-      <header className="panneau-tete">
-        <div className="logo">
-          <Logo />
-          <span className="t-titre-l">Continent</span>
+    <aside className="panneau">
+      <header className="tete">
+        <div className="marque">
+          <Logo size={24} />
+          <span className="t-voyage">Continent</span>
         </div>
-        <span className={`direct t-label-s direct-${p.status}`}>
-          <i className="pastille" />
-          {p.status === 'offline' ? 'Hors ligne' : p.status === 'loading' ? 'Connexion…' : p.status === 'stale' ? `Données de ${hhmm(p.clock)}` : `En direct · ${hhmm(p.clock)}`}
-        </span>
+        <span className={`t-info direct direct-${p.status}`}>{statusText}</span>
       </header>
 
-      <div className="recherche">
-        <Icon name="recherche" />
-        <input ref={input} className="t-corps-m" placeholder="Train, numéro…" value={p.query} onChange={(e) => p.onQuery(e.target.value)}
+      <label className="recherche">
+        <Icon name="recherche" size={18} />
+        <input ref={input} className="t-corps" placeholder="Rechercher un train" value={p.query} onChange={(e) => p.onQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Escape') p.onQuery(''); if (e.key === 'Enter' && p.results[0]) p.onPick(p.results[0].train.id) }} />
-        {p.query ? (
-          <button type="button" className="effacer" aria-label="Effacer" onClick={() => p.onQuery('')}><Icon name="fermer" size={16} /></button>
-        ) : (
-          <kbd className="t-chiffres-s">⌘K</kbd>
-        )}
-      </div>
+        {p.query && <button type="button" className="effacer" aria-label="Effacer" onClick={() => p.onQuery('')}><Icon name="fermer" size={16} /></button>}
+      </label>
 
       {p.query ? (
-        <ul className="resultats">
-          {p.results.length === 0 && <li className="vide t-corps-s">Aucun train en circulation ne correspond.</li>}
+        <ul className="liste">
+          {p.results.length === 0 && <li className="t-info secondaire vide">Aucun train en circulation ne correspond.</li>}
           {p.results.map(({ train, pos }) => (
             <li key={train.id}>
-              <button type="button" onClick={() => p.onPick(train.id)}>
-                <span className="t-label-m">{train.name || train.op}</span>
-                <span className="t-corps-s secondaire">{pos.next ? `vers ${pos.next.name}` : train.op}</span>
-                <StatusBadge statut={pos.statut} delay={pos.delay} rt={pos.rt} />
+              <button type="button" className="ligne" onClick={() => p.onPick(train.id)}>
+                <Trait color={train.op.color} />
+                <span className="ligne-texte">
+                  <span className="t-gare-s">{train.name || train.op.name}</span>
+                  <span className="t-info">{pos.next ? `vers ${pos.next.name}` : train.op.name} · <Retard pos={pos} /></span>
+                </span>
               </button>
             </li>
           ))}
         </ul>
       ) : (
         <>
-          <section className="stats">
-            <div><span className="t-stat">{nombre(s.total)}</span><span className="t-label-s tertiaire">en circulation</span></div>
-            <div><span className="t-stat etat-ok">{pct}&nbsp;%</span><span className="t-label-s tertiaire">à l'heure</span></div>
-            <div><span className="t-stat accent">{nombre(s.gps)}</span><span className="t-label-s tertiaire">positions GPS</span></div>
+          <section className="chiffres">
+            <div><span className="t-nombre">{nombre(s.total)}</span><span className="t-unite">trains en circulation</span></div>
+            <div><span className="t-nombre">{pct}&nbsp;%</span><span className="t-unite">à l'heure</span></div>
+            <div><span className="t-nombre">{nombre(s.gps)}</span><span className="t-unite">positions GPS</span></div>
           </section>
-          <div className="barre-ponctualite" aria-hidden="true">
-            <i className="ok" style={{ flex: s.ok }} />
-            <i className="r1" style={{ flex: s.r1 }} />
-            <i className="r2" style={{ flex: s.r2 }} />
-          </div>
-          <div className="legende-retards t-label-s">
-            <span><i className="pastille ok" />À l'heure {nombre(s.ok)}</span>
-            <span><i className="pastille r1" />Retard {nombre(s.r1)}</span>
-            <span><i className="pastille r2" />+15 min {nombre(s.r2)}</span>
-          </div>
+          <p className="t-info">
+            {nombre(s.r1 + s.r2)} trains en retard, dont <span className={s.r2 ? 'retard' : ''}>{nombre(s.r2)} de plus d'un quart d'heure</span>.
+          </p>
 
-          <h2 className="t-maj tertiaire">Afficher</h2>
-          <div className="puces">
-            {chip('gv', 'Grande vitesse', s.gv)}
-            {chip('cl', 'Classique', s.cl)}
-            <button type="button" className="puce" disabled title="Trains régionaux : bientôt">
-              <span className="t-label-m">Régional</span><span className="t-chiffres-s">–</span>
-            </button>
-            {chip('gps', 'GPS', s.gps)}
-            {chip('estimee', 'Estimées', s.estimee)}
-          </div>
+          <section>
+            <h2 className="t-info-fort">Afficher</h2>
+            <div className="boutons">
+              {bouton('gv', 'Grande vitesse')}
+              {bouton('cl', 'Classique')}
+              <button type="button" className="bouton t-corps" disabled title="Trains régionaux : bientôt">Régional</button>
+            </div>
+            <div className="boutons">
+              {bouton('gps', 'Positions GPS')}
+              {bouton('estimee', 'Positions estimées')}
+            </div>
+          </section>
 
-          <div className="titre-section">
-            <h2 className="t-maj tertiaire">Trains suivis</h2>
-          </div>
-          {p.followed.length === 0 ? (
-            <p className="t-corps-s tertiaire aide">Ouvrez la fiche d'un train et touchez l'étoile pour le suivre ici.</p>
-          ) : (
-            <ul className="suivis">
-              {p.followed.map(({ f, live }) => {
-                const prog = Math.max(0, Math.min(1, (p.clock - f.dep) / (f.arr - f.dep)))
-                return (
-                  <li key={f.id}>
-                    <button type="button" className="carte-suivi" onClick={() => p.onPick(f.id)}>
-                      <span className="ligne1">
-                        <span className="t-label-m">{f.name}</span>
-                        {live ? <StatusBadge statut={live.pos.statut} delay={live.pos.delay} rt={live.pos.rt} /> : <span className="t-label-s tertiaire">{p.clock < f.dep ? 'Pas encore parti' : 'Terminé'}</span>}
-                      </span>
-                      <span className="t-corps-s secondaire">{f.from} → {f.to}</span>
-                      <span className="progression">
-                        <span className="t-chiffres-s tertiaire">{hhmm(f.dep, f.tzFrom)}</span>
-                        <span className="piste"><i style={{ width: `${prog * 100}%` }} /></span>
-                        <span className="t-chiffres-s">{hhmm(f.arr, f.tzTo)}</span>
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
+          <section>
+            <div className="titre">
+              <h2 className="t-info-fort">Compagnies</h2>
+              {f.op && <button type="button" className="t-info lien" onClick={() => p.onFilters({ ...f, op: null })}>Toutes</button>}
+            </div>
+            <ul className="liste">
+              {s.ops.slice(0, 9).map(({ op, n }) => (
+                <li key={op.id}>
+                  <button type="button" className={`ligne${f.op && f.op !== op.id ? ' attenue' : ''}`} aria-pressed={f.op === op.id}
+                    onClick={() => p.onFilters({ ...f, op: f.op === op.id ? null : op.id })}>
+                    <Trait color={op.color} />
+                    <span className="t-gare-s ligne-texte">{op.name}</span>
+                    <span className="t-numero">{nombre(n)}</span>
+                  </button>
+                </li>
+              ))}
             </ul>
-          )}
+          </section>
+
+          <section>
+            <h2 className="t-info-fort">Trains suivis</h2>
+            {p.followed.length === 0 ? (
+              <p className="t-info secondaire">Ouvrez la fiche d'un train et touchez l'étoile pour le retrouver ici.</p>
+            ) : (
+              <ul className="liste">
+                {p.followed.map(({ f: t, live }) => {
+                  const avant = p.clock < t.dep
+                  const c = compte(avant ? t.dep - p.clock : t.arr - p.clock)
+                  const fini = p.clock >= t.arr
+                  return (
+                    <li key={t.id}>
+                      <button type="button" className="ligne suivi" onClick={() => p.onPick(t.id)}>
+                        <span className="compte">
+                          <span className="t-nombre">{fini ? '✓' : c.n}</span>
+                          <span className="t-unite">{fini ? 'arrivé' : c.unite}</span>
+                        </span>
+                        <span className="ligne-texte">
+                          <span className="t-corps">{t.name}</span>
+                          <span className="t-info">{t.from} → {t.to}</span>
+                          <span className="t-info">
+                            {avant ? `Départ à ${heure(t.dep, t.tzFrom)}` : fini ? `Arrivé à ${heure(t.arr, t.tzTo)}` : `Arrivée à ${heure(t.arr, t.tzTo)}`}
+                            {live && !fini && <> · <Retard pos={live.pos} /></>}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
         </>
       )}
 
-      <footer className="panneau-pied">
-        <div className="legende t-label-s secondaire">
-          <span><i className="mini gv" />Grande vitesse</span>
-          <span><i className="mini cl" />Classique</span>
-          <span><i className="mini gps" />Position GPS</span>
-        </div>
-        <p className="t-label-s tertiaire">
-          Positions GPS : Renfe. Ailleurs, positions estimées à partir des horaires et retards temps réel (SNCF, DB, CFF,
-          Trenitalia… via Transitous). Fond © Mapbox © OpenStreetMap.
-        </p>
+      <footer className="pied t-legal secondaire">
+        Couleur du train : sa compagnie. Positions GPS en Espagne (Renfe) ; ailleurs, positions estimées à partir des
+        horaires et des retards en temps réel, via Transitous. Fond © Mapbox © OpenStreetMap.
       </footer>
     </aside>
   )

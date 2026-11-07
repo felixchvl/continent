@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapView, type Filters, type Hover, type MapApi, type Network, type Padding, type Shown } from './map/MapView'
+import { MapView, type City, type Filters, type Hover, type MapApi, type Network, type Padding, type Shown } from './map/MapView'
 import { LiveStore, fetchTrip, positionAt, type TripDetails } from './data/live'
+import { RENFE, operatorOf, type Operator } from './data/operators'
 import { useTheme } from './theme'
 import { useFollowed } from './useFollowed'
 import { Panel, type Stats } from './ui/Panel'
@@ -26,8 +27,9 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now())
   const { pref, theme, cycle } = useTheme()
   const mobile = useMobile()
-  const [filters, setFilters] = useState<Filters>({ gv: true, cl: true, gps: true, estimee: true })
+  const [filters, setFilters] = useState<Filters>({ gv: true, cl: true, gps: true, estimee: true, op: null })
   const [network, setNetwork] = useState<Network | null>(null)
+  const [cities, setCities] = useState<City[]>([])
   const [showNetwork, setShowNetwork] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(location.search).get('train'))
   const [trip, setTrip] = useState<TripDetails | null>(null)
@@ -54,6 +56,7 @@ export default function App() {
 
   useEffect(() => {
     fetch('/data/reseau.json').then((r) => r.json()).then(setNetwork).catch(() => setNetwork(null))
+    fetch('/data/villes.json').then((r) => r.json()).then(setCities).catch(() => setCities([]))
   }, [])
 
   // Selected train: URL, trip details, framing.
@@ -100,21 +103,27 @@ export default function App() {
   }, [now, version, store])
 
   const stats = useMemo<Stats>(() => {
-    const s: Stats = { total: 0, ok: 0, r1: 0, r2: 0, gps: 0, gv: 0, cl: 0, estimee: 0 }
+    const s: Stats = { total: 0, ok: 0, r1: 0, r2: 0, gps: 0, gv: 0, cl: 0, estimee: 0, ops: [] }
+    const ops = new Map<string, { op: Operator; n: number }>()
     for (const { train, pos } of live) {
       s[train.kind]++
       s[pos.source]++
       if (!filters[train.kind] || !filters[pos.source]) continue
+      const o = ops.get(train.op.id) ?? { op: train.op, n: 0 }
+      o.n++
+      ops.set(train.op.id, o)
+      if (filters.op && train.op.id !== filters.op) continue
       s.total++
       s[pos.statut]++
     }
+    s.ops = [...ops.values()].sort((a, b) => Number(a.op.id === 'autre') - Number(b.op.id === 'autre') || b.n - a.n)
     return s
   }, [live, filters])
 
   const results = useMemo(() => {
     const q = normalize(query.trim())
     if (!q) return []
-    return live.filter(({ train }) => normalize(`${train.name} ${train.num} ${train.op}`).includes(q)).slice(0, 8)
+    return live.filter(({ train }) => normalize(`${train.name} ${train.num} ${train.op.name}`).includes(q)).slice(0, 8)
   }, [live, query])
 
   const byId = useMemo(() => new Map(live.map((s) => [s.train.id, s])), [live])
@@ -141,14 +150,15 @@ export default function App() {
   const status = store.error && !store.updated ? 'offline' : !store.updated ? 'loading' : ageMin > 6 ? 'stale' : 'live'
 
   const padding: Padding = mobile
-    ? { top: 16, right: 56, left: 16, bottom: selectedId ? Math.round(window.innerHeight * 0.45) : 190 }
-    : { top: 24, right: 72, left: 412, bottom: 24 }
+    ? { top: 16, right: 60, left: 16, bottom: selectedId ? Math.round(window.innerHeight * 0.5) : 250 }
+    : { top: 32, right: 80, left: 432, bottom: 32 }
 
   return (
     <div className={`app${mobile ? ' mobile' : ''}${selectedId ? ' avec-fiche' : ''}`}>
       <MapView
         store={store}
         network={showNetwork ? network : null}
+        cities={cities}
         theme={theme}
         filters={filters}
         selectedId={selectedId}
@@ -169,6 +179,7 @@ export default function App() {
           trainId={selectedId}
           live={selected}
           trip={trip}
+          operator={selected?.train.op ?? (selectedId.startsWith('renfe:') ? RENFE : operatorOf(selectedId))}
           loading={tripLoading}
           error={tripError}
           now={now}

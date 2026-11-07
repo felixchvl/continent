@@ -2,6 +2,7 @@
 // Outside Spain, positions are estimated from timetables + real-time delays, interpolated along the track.
 
 import { Line, bearing, decodePolyline, type LonLat } from '../lib/geo'
+import { RENFE, operatorOf, type Operator } from './operators'
 
 export type Kind = 'gv' | 'cl'
 export type Statut = 'ok' | 'r1' | 'r2'
@@ -31,7 +32,7 @@ export type Gps = {
   anchor?: { seg: number; along: number }
 }
 
-export type Train = { id: string; name: string; num: string; kind: Kind; op: string; segs: Seg[]; gps?: Gps }
+export type Train = { id: string; name: string; num: string; kind: Kind; op: Operator; segs: Seg[]; gps?: Gps }
 
 export type Pos = {
   lon: number
@@ -49,14 +50,6 @@ export type Pos = {
 
 export const TRANSITOUS = 'https://api.transitous.org/api'
 const KIND: Record<string, Kind> = { HIGHSPEED_RAIL: 'gv', LONG_DISTANCE: 'cl', NIGHT_RAIL: 'cl' }
-const OPERATORS: [string, string][] = [
-  ['fr-horaires-sncf', 'SNCF'], ['fr-eurostar', 'Eurostar'], ['es-RENFE', 'Renfe'], ['es-Ouigo', 'Ouigo'],
-  ['es-iryo', 'Iryo'], ['it-trenitalia', 'Trenitalia'], ['it-italo', 'Italo'], ['de-', 'DB'], ['at-', 'ÖBB'],
-  ['ch-', 'CFF'], ['pl-PKP', 'PKP Intercity'], ['pl-', 'PKP'], ['gb-', 'National Rail'], ['dk-', 'DSB'],
-  ['hu-', 'MÁV'], ['cz-', 'ČD'], ['nl-', 'NS'], ['se-', 'SJ'], ['sk-', 'ZSSK'], ['no-', 'Vy'], ['fi-', 'VR'],
-  ['be-', 'SNCB'], ['lu-', 'CFL'], ['pt-', 'CP'], ['eu-european-sleeper', 'European Sleeper'],
-]
-
 export const statutOf = (delay: number): Statut => (delay >= 15 ? 'r2' : delay >= 5 ? 'r1' : 'ok')
 const ms = (s: string | undefined) => (s ? Date.parse(s) : NaN)
 const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z')
@@ -66,11 +59,6 @@ export function cleanName(n: string): string {
   return /\p{Ll}/u.test(s) ? s : titleCase(s) // some feeds publish station names in capitals
 }
 const digits = (s: string) => (s.match(/\d+/g) ?? []).join('')
-
-function operatorOf(tripId: string): string {
-  const feed = tripId.split('_')[2] ?? ''
-  return OPERATORS.find(([p]) => feed.toLowerCase().startsWith(p.toLowerCase()))?.[1] ?? ''
-}
 
 type ApiStop = { name: string; stopId: string; lat: number; lon: number; tz?: string }
 type ApiSeg = {
@@ -258,7 +246,7 @@ export class LiveStore {
       else delete t.gps
     }
     const byNum = new Map<string, Train>()
-    for (const t of this.trains.values()) if (t.op === 'Renfe' && t.num) byNum.set(t.num.padStart(5, '0'), t)
+    for (const t of this.trains.values()) if (t.op.id === 'renfe' && t.num) byNum.set(t.num.padStart(5, '0'), t)
     const delays = new Map(tu.entity.map((e) => [e.tripUpdate.trip.tripId.slice(0, 5), (e.tripUpdate.delay ?? 0) / 60]))
     const ts = Number(vp.header.timestamp) * 1000 || Date.now()
     const seen = new Set<string>()
@@ -288,7 +276,7 @@ export class LiveStore {
         train.gps = gps
       } else {
         const id = `renfe:${num}`
-        this.trains.set(id, { id, name: `Renfe ${Number(num)}`, num: String(Number(num)), kind: 'cl', op: 'Renfe', segs: [], gps })
+        this.trains.set(id, { id, name: `Renfe ${Number(num)}`, num: String(Number(num)), kind: 'cl', op: RENFE, segs: [], gps })
       }
     }
   }
