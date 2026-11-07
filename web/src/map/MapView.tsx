@@ -53,7 +53,7 @@ const readPalette = (): Palette => ({
 
 const FONT = 'Halyard, halyard-display, Helvetica Neue, Helvetica, Arial, sans-serif'
 /** Dot radius (px at radiusScale 1): high speed above long distance above regional. */
-const RADIUS = { gv: 3.4, cl: 3, reg: 2.1 }
+const RADIUS = { gv: 3.8, cl: 3.3, reg: 2.6 }
 const DRAW_ORDER = { reg: 0, cl: 1, gv: 2 }
 const measureCtx = document.createElement('canvas').getContext('2d')!
 const widths = new Map<string, number>()
