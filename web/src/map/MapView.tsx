@@ -117,6 +117,7 @@ export function MapView(props: Props) {
         if (isSel) selected = { train, pos }
         else if (p.filters[pos.source]) shown.push({ train, pos })
       }
+      if (import.meta.env.DEV) Object.assign(window, { __shown: shown })
       const size = markerSize(map.getZoom())
       const top = {
         iconAtlas: atlas.url, iconMapping: atlas.mapping, billboard: false, sizeUnits: 'pixels' as const,

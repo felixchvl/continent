@@ -216,9 +216,9 @@ ol, ul { list-style: none; }
 
 .infobulle {
   position: absolute; z-index: 3; pointer-events: none; display: flex; flex-direction: column; gap: 6px;
-  min-width: 250px; max-width: 320px; padding: 12px 14px; border-radius: var(--rayon-l);
+  min-width: 280px; max-width: 360px; padding: 12px 14px; border-radius: var(--rayon-l);
 }
-.ligne3 { display: flex; align-items: center; gap: 10px; }
+.ligne3 { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .ligne3 .accent { margin-left: auto; }
 
 /* Mapbox controls in the house style (the logo must stay visible: keep it clear of the panel) */
@@ -254,4 +254,5 @@ ol, ul { list-style: none; }
   .mapboxgl-ctrl-bottom-left { left: 0 !important; bottom: 190px; }
   .avec-fiche .mapboxgl-ctrl-bottom-left { bottom: 58dvh; }
   .stats .t-stat { font-size: 20px; line-height: 24px; }
+  .recherche kbd { display: none; }
 }
