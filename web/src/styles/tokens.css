@@ -1,0 +1,117 @@
+/* Design tokens exported from the Figma file "Continent — Design" (collection Couleurs, modes Clair / Sombre).
+   Names match the variables' code syntax in Figma. */
+
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+:root,
+:root[data-theme='clair'] {
+  color-scheme: light;
+  --carte-mer: #d3dfe8;
+  --carte-terre: #f1f3f0;
+  --carte-frontiere: #bcc7cf;
+  --carte-reseau-gv: #8a9dad;
+  --carte-reseau-classique: #c9d2d9;
+  --carte-ville: #3f505e;
+  --surface-verre: rgb(251 252 253 / 82%);
+  --surface-eleve: #eff3f6;
+  --surface-survol: rgb(11 26 38 / 5%);
+  --bord-subtil: rgb(11 26 38 / 10%);
+  --bord-fort: rgb(11 26 38 / 20%);
+  --texte-primaire: #0b1a26;
+  --texte-secondaire: #4b5e6d;
+  --texte-tertiaire: #7f909e;
+  --accent-azur: #0b7fd6;
+  --etat-a-l-heure: #0c9461;
+  --etat-retard: #c47a00;
+  --etat-gros-retard: #de3b3b;
+  --etat-supprime: #8696a2;
+  --marque-marine: #00233a;
+  --etat-a-l-heure-teinte: rgb(12 148 97 / 12%);
+  --etat-retard-teinte: rgb(196 122 0 / 14%);
+  --etat-gros-retard-teinte: rgb(222 59 59 / 12%);
+  --etat-supprime-teinte: rgb(134 150 162 / 18%);
+  --etat-a-l-heure-halo: rgb(12 148 97 / 35%);
+  --etat-retard-halo: rgb(196 122 0 / 35%);
+  --etat-gros-retard-halo: rgb(222 59 59 / 35%);
+  --etat-supprime-halo: rgb(134 150 162 / 35%);
+  --accent-azur-teinte: rgb(11 127 214 / 12%);
+  --accent-azur-trait: rgb(11 127 214 / 45%);
+  --effet-ombre-verre: rgb(11 26 38 / 14%);
+  --effet-ombre-marqueur: rgb(11 26 38 / 32%);
+  --effet-lueur-selection: rgb(11 127 214 / 40%);
+  --effet-halo-etiquette: #f1f3f0;
+}
+
+:root[data-theme='sombre'] {
+  color-scheme: dark;
+  --carte-mer: #060e16;
+  --carte-terre: #0d1a26;
+  --carte-frontiere: #2a3f52;
+  --carte-reseau-gv: #46647e;
+  --carte-reseau-classique: #263c50;
+  --carte-ville: #8fa3b3;
+  --surface-verre: rgb(10 22 32 / 74%);
+  --surface-eleve: #152331;
+  --surface-survol: rgb(255 255 255 / 6%);
+  --bord-subtil: rgb(255 255 255 / 9%);
+  --bord-fort: rgb(255 255 255 / 18%);
+  --texte-primaire: #f2f5f7;
+  --texte-secondaire: #9eb0be;
+  --texte-tertiaire: #5f7484;
+  --accent-azur: #4db5ff;
+  --etat-a-l-heure: #3edb98;
+  --etat-retard: #ffc24b;
+  --etat-gros-retard: #ff5f5b;
+  --etat-supprime: #6e7f8c;
+  --marque-marine: #00233a;
+  --etat-a-l-heure-teinte: rgb(62 219 152 / 14%);
+  --etat-retard-teinte: rgb(255 194 75 / 14%);
+  --etat-gros-retard-teinte: rgb(255 95 91 / 14%);
+  --etat-supprime-teinte: rgb(110 127 140 / 20%);
+  --etat-a-l-heure-halo: rgb(62 219 152 / 40%);
+  --etat-retard-halo: rgb(255 194 75 / 40%);
+  --etat-gros-retard-halo: rgb(255 95 91 / 40%);
+  --etat-supprime-halo: rgb(110 127 140 / 40%);
+  --accent-azur-teinte: rgb(77 181 255 / 14%);
+  --accent-azur-trait: rgb(77 181 255 / 45%);
+  --effet-ombre-verre: rgb(0 0 0 / 38%);
+  --effet-ombre-marqueur: rgb(0 0 0 / 55%);
+  --effet-lueur-selection: rgb(77 181 255 / 55%);
+  --effet-halo-etiquette: #060e16;
+}
+
+:root {
+  --espace-1: 4px;
+  --espace-2: 8px;
+  --espace-3: 12px;
+  --espace-4: 16px;
+  --espace-5: 20px;
+  --espace-6: 24px;
+  --espace-8: 32px;
+  --rayon-s: 8px;
+  --rayon-m: 12px;
+  --rayon-l: 16px;
+  --rayon-xl: 22px;
+  --rayon-plein: 999px;
+
+  --police: 'Geist Variable', system-ui, sans-serif;
+  --police-chiffres: 'Geist Mono Variable', ui-monospace, monospace;
+  --verre-flou: blur(28px) saturate(140%);
+  --verre-ombre: 0 16px 40px var(--effet-ombre-verre);
+}
+
+/* Text styles (Figma: Titre, Corps, Label, Chiffres) */
+.t-titre-xl { font: 600 28px/32px var(--police); letter-spacing: -0.015em; }
+.t-titre-l { font: 600 20px/24px var(--police); letter-spacing: -0.01em; }
+.t-titre-m { font: 600 16px/20px var(--police); letter-spacing: -0.005em; }
+.t-corps-m { font: 400 14px/20px var(--police); }
+.t-corps-s { font: 400 13px/18px var(--police); }
+.t-label-m { font: 500 13px/16px var(--police); }
+.t-label-s { font: 500 12px/16px var(--police); }
+.t-maj { font: 500 11px/14px var(--police); letter-spacing: 0.06em; text-transform: uppercase; }
+.t-stat { font: 600 24px/28px var(--police); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.t-chiffres-xl { font: 500 30px/34px var(--police-chiffres); letter-spacing: -0.02em; }
+.t-chiffres-l { font: 500 20px/24px var(--police-chiffres); letter-spacing: -0.01em; }
+.t-chiffres-m { font: 500 14px/18px var(--police-chiffres); }
+.t-chiffres-s { font: 400 12px/16px var(--police-chiffres); }
