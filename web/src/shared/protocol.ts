@@ -1,0 +1,34 @@
+// What the server sends to the web app. Two payloads, so that the frequent one stays small:
+// - meta (when the set of trains changes, every few minutes): who each train is;
+// - live (every 10 s): where each running train is, as integers in meta order.
+
+import type { Kind } from './model.ts'
+import type { Operator } from './operators.ts'
+
+export const KINDS: Kind[] = ['gv', 'cl', 'reg']
+
+/** [id, name, operator index, kind index] */
+export type MetaTrain = [string, string, number, number]
+export type Meta = { v: number; ops: Operator[]; trains: MetaTrain[] }
+
+/** Flat list, 7 integers per running train. */
+export const LIVE_STRIDE = 7
+export type Live = { t: number; v: number; d: number[] }
+
+export const FLAG_GPS = 1
+export const FLAG_MOVING = 2
+export const FLAG_RT = 4
+
+/** One row of `live.d`: meta index, lon×1e5, lat×1e5, bearing (deg), speed (m/s ×10), delay (min), flags. */
+export type LiveRow = { i: number; lon: number; lat: number; bearing: number; mps: number; delay: number; flags: number }
+
+export type TrainDetail = {
+  id: string
+  name: string
+  next: { name: string; arr: number | null; tz?: string } | null
+  speed: number | null
+  delay: number
+  rt: boolean
+  source: 'gps' | 'estimee'
+  moving: boolean
+}

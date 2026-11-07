@@ -46,6 +46,11 @@ ol, ul { list-style: none; }
 .bouton-icone .auto { position: absolute; right: 3px; bottom: 2px; font: 400 8px/1 var(--police); color: var(--texte-2); }
 
 .trait-compagnie { flex: none; width: 3px; height: 22px; border-radius: 2px; }
+.logo-compagnie { display: block; width: auto; max-width: 72px; object-fit: contain; object-position: left center; }
+.logo-case { flex: none; width: 64px; display: flex; align-items: center; }
+.logo-titre { display: flex; align-items: center; min-height: 30px; }
+/* Logos are drawn for white backgrounds: in dark mode they sit on a small white tile. */
+:root[data-theme='sombre'] .logo-compagnie { background: #fff; padding: 2px 4px; border-radius: 3px; box-sizing: content-box; }
 
 /* ---- Panels: attached to the left edge, full height, separated by a hairline ---- */
 .panneau-conteneur,
@@ -85,7 +90,7 @@ ol, ul { list-style: none; }
 /* Lists: hairlines that start at the text column, not at the edge */
 .liste { margin-top: 6px; }
 .liste li { position: relative; }
-.liste li + li::before { content: ''; position: absolute; top: 0; left: 15px; right: 0; border-top: 0.5px solid var(--filet); }
+.liste li + li::before { content: ''; position: absolute; top: 0; left: 76px; right: 0; border-top: 0.5px solid var(--filet); }
 .liste li:has(.suivi) + li::before { left: 64px; }
 .ligne { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 0; }
 .ligne:hover .ligne-texte > :first-child,
@@ -104,11 +109,11 @@ ol, ul { list-style: none; }
 .retour:hover { text-decoration: underline; text-underline-offset: 4px; }
 .actions { display: flex; gap: 2px; }
 
-.voyage { display: grid; grid-template-columns: 28px 1fr; column-gap: 24px; align-items: start; }
-.pastille-compagnie { width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; background: var(--compagnie); }
+.voyage { display: flex; flex-direction: column; gap: 12px; }
+.pastille-compagnie { flex: none; display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: var(--compagnie); }
 .voyage p { margin-top: 4px; }
 .voyage p::first-letter { text-transform: uppercase; }
-.etat { margin-top: -10px; padding-left: 52px; }
+.etat { margin-top: -10px; }
 
 /* The timeline: 3 px line in the operator's colour, 11 px dots, text at the column */
 .frise { position: relative; }

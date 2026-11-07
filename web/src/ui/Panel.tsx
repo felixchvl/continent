@@ -3,15 +3,16 @@
 // by their colour.
 
 import { useEffect, useRef } from 'react'
-import type { Filters, Shown } from '../map/MapView'
-import type { Operator } from '../data/operators'
+import type { Filters } from '../map/MapView'
+import type { Shown } from '../data/live'
+import type { Operator } from '../shared/operators.ts'
 import { compte, heure, nombre } from '../lib/format'
 import { Icon, Logo } from './Icon'
-import { Retard, Trait } from './bits'
+import { LogoCompagnie, Retard } from './bits'
 import type { FollowedTrain } from '../useFollowed'
 
 export type Stats = {
-  total: number; ok: number; r1: number; r2: number; gps: number; gv: number; cl: number; estimee: number
+  total: number; ok: number; r1: number; r2: number; gps: number; gv: number; cl: number; reg: number; estimee: number
   ops: { op: Operator; n: number }[]
 }
 
@@ -44,8 +45,8 @@ export function Panel(p: Props) {
   const s = p.stats
   const pct = s.total ? Math.round((s.ok / s.total) * 100) : 0
   const f = p.filters
-  const toggle = (k: 'gv' | 'cl' | 'gps' | 'estimee') => p.onFilters({ ...f, [k]: !f[k] })
-  const bouton = (k: 'gv' | 'cl' | 'gps' | 'estimee', label: string) => (
+  const toggle = (k: 'gv' | 'cl' | 'reg' | 'gps' | 'estimee') => p.onFilters({ ...f, [k]: !f[k] })
+  const bouton = (k: 'gv' | 'cl' | 'reg' | 'gps' | 'estimee', label: string) => (
     <button type="button" className={`bouton t-corps${f[k] ? ' actif' : ''}`} onClick={() => toggle(k)} aria-pressed={f[k]}>
       {label}
     </button>
@@ -76,10 +77,10 @@ export function Panel(p: Props) {
           {p.results.map(({ train, pos }) => (
             <li key={train.id}>
               <button type="button" className="ligne" onClick={() => p.onPick(train.id)}>
-                <Trait color={train.op.color} />
+                <span className="logo-case"><LogoCompagnie op={train.op} height={18} /></span>
                 <span className="ligne-texte">
                   <span className="t-gare-s">{train.name || train.op.name}</span>
-                  <span className="t-info">{pos.next ? `vers ${pos.next.name}` : train.op.name} · <Retard pos={pos} /></span>
+                  <span className="t-info">{train.op.name} · <Retard pos={pos} /></span>
                 </span>
               </button>
             </li>
@@ -100,8 +101,8 @@ export function Panel(p: Props) {
             <h2 className="t-info-fort">Afficher</h2>
             <div className="boutons">
               {bouton('gv', 'Grande vitesse')}
-              {bouton('cl', 'Classique')}
-              <button type="button" className="bouton t-corps" disabled title="Trains régionaux : bientôt">Régional</button>
+              {bouton('cl', 'Grandes lignes')}
+              {bouton('reg', 'Régional')}
             </div>
             <div className="boutons">
               {bouton('gps', 'Positions GPS')}
@@ -119,7 +120,7 @@ export function Panel(p: Props) {
                 <li key={op.id}>
                   <button type="button" className={`ligne${f.op && f.op !== op.id ? ' attenue' : ''}`} aria-pressed={f.op === op.id}
                     onClick={() => p.onFilters({ ...f, op: f.op === op.id ? null : op.id })}>
-                    <Trait color={op.color} />
+                    <span className="logo-case"><LogoCompagnie op={op} /></span>
                     <span className="t-gare-s ligne-texte">{op.name}</span>
                     <span className="t-numero">{nombre(n)}</span>
                   </button>
@@ -164,7 +165,7 @@ export function Panel(p: Props) {
       )}
 
       <footer className="pied t-legal secondaire">
-        Couleur du train : sa compagnie. Positions GPS en Espagne (Renfe) ; ailleurs, positions estimées à partir des
+        Tous les trains d'Europe, grandes lignes et régionaux ; la couleur du point est celle de la compagnie. Positions GPS en Espagne (Renfe) ; ailleurs, positions estimées à partir des
         horaires et des retards en temps réel, via Transitous. Fond © Mapbox © OpenStreetMap.
       </footer>
     </aside>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapView, type City, type Filters, type Hover, type MapApi, type Network, type Padding, type Shown } from './map/MapView'
-import { LiveStore, fetchTrip, positionAt, type TripDetails } from './data/live'
-import { RENFE, operatorOf, type Operator } from './data/operators'
+import { MapView, type City, type Filters, type Hover, type MapApi, type Network, type Padding } from './map/MapView'
+import { LiveStore, fetchTrip, type Shown, type TripDetails } from './data/live'
+import { RENFE, operatorOf, type Operator } from './shared/operators.ts'
 import { useTheme } from './theme'
 import { useFollowed } from './useFollowed'
 import { Panel, type Stats } from './ui/Panel'
@@ -27,7 +27,7 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now())
   const { pref, theme, cycle } = useTheme()
   const mobile = useMobile()
-  const [filters, setFilters] = useState<Filters>({ gv: true, cl: true, gps: true, estimee: true, op: null })
+  const [filters, setFilters] = useState<Filters>({ gv: true, cl: true, reg: true, gps: true, estimee: true, op: null })
   const [network, setNetwork] = useState<Network | null>(null)
   const [cities, setCities] = useState<City[]>([])
   const [showNetwork, setShowNetwork] = useState(true)
@@ -46,7 +46,7 @@ export default function App() {
   useEffect(() => {
     const off = store.subscribe(() => setVersion((v) => v + 1))
     store.start()
-    const id = setInterval(() => setNow(Date.now()), 2000)
+    const id = setInterval(() => setNow(Date.now()), 5000)
     return () => {
       off()
       store.stop()
@@ -92,18 +92,13 @@ export default function App() {
   }, [])
 
   // Snapshot of every running train, refreshed every 2 s (counters, search, followed trains).
-  const live = useMemo(() => {
+  const live = useMemo<Shown[]>(() => {
     void version
-    const list: Shown[] = []
-    for (const train of store.trains.values()) {
-      const pos = positionAt(train, now)
-      if (pos) list.push({ train, pos })
-    }
-    return list
+    return store.all(now)
   }, [now, version, store])
 
   const stats = useMemo<Stats>(() => {
-    const s: Stats = { total: 0, ok: 0, r1: 0, r2: 0, gps: 0, gv: 0, cl: 0, estimee: 0, ops: [] }
+    const s: Stats = { total: 0, ok: 0, r1: 0, r2: 0, gps: 0, gv: 0, cl: 0, reg: 0, estimee: 0, ops: [] }
     const ops = new Map<string, { op: Operator; n: number }>()
     for (const { train, pos } of live) {
       s[train.kind]++

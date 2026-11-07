@@ -1,22 +1,21 @@
-// The map: Mapbox GL draws the quiet base map; deck.gl draws the network, the trains in their
-// operator's colour, the selected route and the city names in Halyard. Trains are repositioned
-// ~15 times per second from the timetable/real-time model, without re-rendering React.
+// The map: Mapbox GL draws the quiet base map; deck.gl draws the network, every train in Europe
+// as a dot in its operator's colour, the selected route and the city names in Halyard.
+// Dots are moved ~15 times per second between two server updates, without re-rendering React.
 
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
-import { IconLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import type { Layer, PickingInfo } from '@deck.gl/core'
 import { applyTheme, buildStyle } from './style'
-import { buildMarkerAtlas, markerSize } from './markers'
 import { token, type RGBA, type Theme } from '../theme'
-import { positionAt, type LiveStore, type Pos, type Train, type TripDetails, type TripStop } from '../data/live'
-import { hexToRgb } from '../data/operators'
-import type { LonLat } from '../lib/geo'
+import { FLAG_GPS } from '../shared/protocol.ts'
+import { hexToRgb } from '../shared/operators.ts'
+import type { LiveStore, Shown, TripDetails, TripStop } from '../data/live'
+import type { LonLat } from '../shared/geo.ts'
 
-export type Filters = { gv: boolean; cl: boolean; gps: boolean; estimee: boolean; op: string | null }
-export type Shown = { train: Train; pos: Pos }
+export type Filters = { gv: boolean; cl: boolean; reg: boolean; gps: boolean; estimee: boolean; op: string | null }
 export type Network = { gv: number[][]; cl: number[][] }
 /** [lon, lat, name, minZoom, capital, priority] — see scripts/build-villes.ts */
 export type City = [number, number, string, number, number, number]
@@ -45,6 +44,7 @@ type Props = {
 }
 
 type Palette = Record<'terre' | 'gv' | 'cl' | 'texte' | 'halo' | 'accent' | 'fond', RGBA>
+type Box = [number, number, number, number]
 
 const readPalette = (): Palette => ({
   terre: token('carte-terre'), gv: token('carte-reseau-gv'), cl: token('carte-reseau-classique'),
@@ -52,7 +52,9 @@ const readPalette = (): Palette => ({
 })
 
 const FONT = 'Halyard, halyard-display, Helvetica Neue, Helvetica, Arial, sans-serif'
-const atlas = buildMarkerAtlas()
+/** Dot radius (px at radiusScale 1): high speed above long distance above regional. */
+const RADIUS = { gv: 3.4, cl: 3, reg: 2.1 }
+const DRAW_ORDER = { reg: 0, cl: 1, gv: 2 }
 const measureCtx = document.createElement('canvas').getContext('2d')!
 const widths = new Map<string, number>()
 function textWidth(text: string, weight: number, size: number) {
@@ -69,6 +71,18 @@ const rgb = (hex: string) => {
   let c = rgbCache.get(hex)
   if (!c) rgbCache.set(hex, (c = hexToRgb(hex)))
   return c
+}
+const overlaps = (b: Box, boxes: Box[]) => boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])
+
+function radiusScale(zoom: number) {
+  const stops: [number, number][] = [[3, 0.75], [5, 1], [7, 1.3], [9, 1.7], [12, 2.4], [15, 3]]
+  if (zoom <= stops[0][0]) return stops[0][1]
+  for (let i = 1; i < stops.length; i++) {
+    const [z1, s1] = stops[i]
+    const [z0, s0] = stops[i - 1]
+    if (zoom <= z1) return s0 + ((zoom - z0) / (z1 - z0)) * (s1 - s0)
+  }
+  return stops[stops.length - 1][1]
 }
 
 export function MapView(props: Props) {
@@ -95,39 +109,82 @@ export function MapView(props: Props) {
     })
     mapRef.current = map
     map.on('error', (e) => console.error('Mapbox', e.error?.message ?? e))
-    if (import.meta.env.DEV) Object.assign(window, { __map: map })
+    if (import.meta.env.DEV) Object.assign(window, { __map: map, __store: propsRef.current.store })
     map.setPadding(propsRef.current.padding)
     map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right')
     map.addControl(new mapboxgl.ScaleControl({ maxWidth: 96 }), 'bottom-right')
+
+    // Visible trains: rebuilt when new data arrives or a filter changes, not on every frame.
+    const vis = { key: '', n: 0, rows: new Int32Array(0), colors: new Uint8Array(0), radii: new Float32Array(0), gps: [] as number[] }
+    const buf = [new Float32Array(0), new Float32Array(0)]
+    let flip = 0
+    const scratch = new Float64Array(2)
+
+    const shownAt = (k: number): Shown => {
+      const s = propsRef.current.store
+      const r = vis.rows[k]
+      return { train: s.trains[s.idx[r]], pos: s.pos(r, Date.now()) }
+    }
 
     const overlay = new MapboxOverlay({
       interleaved: false, // deck.gl on its own canvas above the map: city names are deck.gl layers too
       layers: [],
       pickingRadius: 6,
-      onHover: (info: PickingInfo<Shown>) => {
-        map.getCanvas().style.cursor = info.object ? 'pointer' : ''
-        propsRef.current.onHover(info.object ? { shown: info.object, x: info.x, y: info.y } : null)
+      onHover: (info: PickingInfo) => {
+        const hit = info.layer?.id === 'trains' && info.index >= 0
+        map.getCanvas().style.cursor = hit ? 'pointer' : ''
+        propsRef.current.onHover(hit ? { shown: shownAt(info.index), x: info.x, y: info.y } : null)
       },
-      onClick: (info: PickingInfo<Shown>) => propsRef.current.onSelect(info.object ? info.object.train.id : null),
+      onClick: (info: PickingInfo) => {
+        if (info.layer?.id === 'trains' && info.index >= 0) propsRef.current.onSelect(shownAt(info.index).train.id)
+        else if (info.layer?.id !== 'selection-train') propsRef.current.onSelect(null)
+      },
     })
     map.addControl(overlay)
 
-    // City names: placed greedily by priority so that no two labels overlap. In Web Mercator the
-    // placement only depends on the zoom, so it is recomputed per quarter zoom level (and theme).
-    const cityLayers = (zoom: number, pal: Palette, reserved: [number, number, number, number][], tripKey: string): Layer[] => {
+    const rebuildVisible = () => {
+      const { store: s, filters: f } = propsRef.current
+      const rows: number[] = []
+      for (let r = 0; r < s.n; r++) {
+        const t = s.trains[s.idx[r]]
+        if (!t || !f[t.kind] || (f.op && t.op.id !== f.op)) continue
+        if (!f[s.flags[r] & FLAG_GPS ? 'gps' : 'estimee']) continue
+        rows.push(r)
+      }
+      rows.sort((a, b) => DRAW_ORDER[s.trains[s.idx[a]].kind] - DRAW_ORDER[s.trains[s.idx[b]].kind])
+      const n = rows.length
+      vis.rows = Int32Array.from(rows)
+      vis.colors = new Uint8Array(n * 4)
+      vis.radii = new Float32Array(n)
+      vis.gps = []
+      for (let k = 0; k < n; k++) {
+        const t = s.trains[s.idx[rows[k]]]
+        const [r, g, b] = rgb(t.op.color)
+        vis.colors.set([r, g, b, 255], k * 4)
+        vis.radii[k] = RADIUS[t.kind]
+        if (s.flags[rows[k]] & FLAG_GPS) vis.gps.push(k)
+      }
+      vis.n = n
+      buf[0] = new Float32Array(n * 2)
+      buf[1] = new Float32Array(n * 2)
+    }
+
+    // City names: placed greedily by priority so that no two labels overlap (and none covers a
+    // station of the selected train). In Web Mercator the result only depends on the zoom.
+    const cityLayers = (zoom: number, pal: Palette, reserved: Box[], tripKey: string): Layer[] => {
       const key = `${Math.floor(zoom * 4)}-${propsRef.current.theme}-${propsRef.current.cities.length}-${tripKey}`
       const cache = staticLayers.current
       if (cache.key === key) return cache.cities
       const boxes = [...reserved]
-      const placed: City[] = []
+      const placed: typeof propsRef.current.cities = []
       for (const c of propsRef.current.cities) {
         if (c[3] > zoom + 0.25) continue
         const size = c[4] ? 13.5 : 12
         const w = textWidth(c[2], c[4] ? 500 : 400, size) + 10
         const h = size + 8
         const { x, y } = map.project([c[0], c[1]])
-        const b: [number, number, number, number] = [x - w / 2, y - h / 2, x + w / 2, y + h / 2]
-        if (boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) continue
+        const b: Box = [x - w / 2, y - h / 2, x + w / 2, y + h / 2]
+        if (overlaps(b, boxes)) continue
         boxes.push(b)
         placed.push(c)
       }
@@ -144,28 +201,25 @@ export function MapView(props: Props) {
       return cache.cities
     }
 
-    const stopCache = { key: '', list: [] as TripStop[], boxes: [] as [number, number, number, number][] }
+    const stopCache = { key: '', list: [] as TripStop[], boxes: [] as Box[] }
     const stopLabels = (stops: TripStop[], zoom: number) => {
       const key = `${stops[0]?.id}-${stops.length}-${Math.floor(zoom * 4)}`
       if (stopCache.key === key) return stopCache.list
       const order = stops.map((s, i) => ({ s, rank: i === 0 || i === stops.length - 1 ? 1 : 0 })).sort((a, b) => b.rank - a.rank)
-      const boxes: [number, number, number, number][] = []
+      const boxes: Box[] = []
       const out: TripStop[] = []
       for (const { s } of order) {
         const { x, y } = map.project([s.lon, s.lat])
-        const b: [number, number, number, number] = [x - 6, y - 10, x + 14 + textWidth(s.name, 350, 13), y + 10]
-        if (boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) continue
+        const b: Box = [x - 6, y - 10, x + 14 + textWidth(s.name, 350, 13), y + 10]
+        if (overlaps(b, boxes)) continue
         boxes.push(b)
         out.push(s)
       }
-      // Every stop dot also keeps city names away, even when its own name is hidden.
       for (const s of stops) {
         const { x, y } = map.project([s.lon, s.lat])
-        boxes.push([x - 6, y - 6, x + 6, y + 6])
+        boxes.push([x - 6, y - 6, x + 6, y + 6]) // every stop dot keeps city names away
       }
-      stopCache.key = key
-      stopCache.list = out
-      stopCache.boxes = boxes
+      Object.assign(stopCache, { key, list: out, boxes })
       return out
     }
 
@@ -173,27 +227,24 @@ export function MapView(props: Props) {
     let last = 0
     const render = () => {
       const p = propsRef.current
+      const s = p.store
       const pal = paletteRef.current
       const f = p.filters
       const t = Date.now()
-      const shown: Shown[] = []
-      let selected: Shown | null = null
-      for (const train of p.store.trains.values()) {
-        const isSel = train.id === p.selectedId
-        if (!isSel && (!f[train.kind] || (f.op && train.op.id !== f.op))) continue
-        const pos = positionAt(train, t)
-        if (!pos) continue
-        if (isSel) selected = { train, pos }
-        else if (f[pos.source]) shown.push({ train, pos })
+      const key = `${s.updated}-${s.version}-${f.gv}${f.cl}${f.reg}${f.gps}${f.estimee}-${f.op}`
+      if (vis.key !== key) {
+        rebuildVisible()
+        vis.key = key
       }
-      if (import.meta.env.DEV) Object.assign(window, { __shown: shown })
+      const positions = buf[(flip ^= 1)]
+      for (let k = 0; k < vis.n; k++) {
+        s.project(vis.rows[k], t, scratch, 0)
+        positions[k * 2] = scratch[0]
+        positions[k * 2 + 1] = scratch[1]
+      }
       const zoom = map.getZoom()
-      const size = markerSize(zoom)
-      const marker = {
-        iconAtlas: atlas.url, iconMapping: atlas.mapping, billboard: false, sizeUnits: 'pixels' as const,
-        sizeScale: size, getSize: 1, getPosition: (d: Shown) => [d.pos.lon, d.pos.lat] as [number, number],
-        getAngle: (d: Shown) => 90 - d.pos.bearing, updateTriggers: { getPosition: t, getAngle: t },
-      }
+      const scale = radiusScale(zoom)
+      const selected = p.selectedId ? s.get(p.selectedId, t) : null
       const layers: Layer[] = [...staticLayers.current.network]
       let stopNames: Layer | null = null
 
@@ -216,37 +267,52 @@ export function MapView(props: Props) {
             getColor: color, widthUnits: 'pixels', getWidth: 3, capRounded: true, jointRounded: true,
             updateTriggers: { getPath: c.along },
           }),
-          new ScatterplotLayer({
-            id: 'arrets', data: p.trip.stops, getPosition: (s) => [s.lon, s.lat], radiusUnits: 'pixels', getRadius: 4.5,
+          new ScatterplotLayer<TripStop>({
+            id: 'arrets', data: p.trip.stops, getPosition: (st) => [st.lon, st.lat], radiusUnits: 'pixels', getRadius: 4.5,
             stroked: true, getFillColor: color, getLineColor: pal.terre, lineWidthUnits: 'pixels', getLineWidth: 1.5,
           }),
         )
-        stopNames = new TextLayer({
-            id: 'arrets-noms', data: stopLabels(p.trip.stops, zoom), getPosition: (s) => [s.lon, s.lat], getText: (s) => s.name,
-            getSize: 13, getColor: pal.texte, fontFamily: FONT, fontWeight: 350, getTextAnchor: 'start',
-            getAlignmentBaseline: 'center', getPixelOffset: [10, 0], fontSettings: { sdf: true, buffer: 6 }, outlineWidth: 4,
-            outlineColor: pal.halo, characterSet: 'auto',
-          })
+        stopNames = new TextLayer<TripStop>({
+          id: 'arrets-noms', data: stopLabels(p.trip.stops, zoom), getPosition: (st) => [st.lon, st.lat], getText: (st) => st.name,
+          getSize: 13, getColor: pal.texte, fontFamily: FONT, fontWeight: 350, getTextAnchor: 'start',
+          getAlignmentBaseline: 'center', getPixelOffset: [10, 0], fontSettings: { sdf: true, buffer: 6 }, outlineWidth: 4,
+          outlineColor: pal.halo, characterSet: 'auto',
+        })
       }
 
       layers.push(
-        new IconLayer<Shown>({
-          ...marker, id: 'trains-gps', data: shown.filter((d) => d.pos.source === 'gps'), getIcon: (d) => `${d.train.kind}-h`,
-          getColor: (d) => [...rgb(d.train.op.color), 110],
+        new ScatterplotLayer({
+          id: 'trains-gps', data: vis.gps, getPosition: (k: number) => [positions[k * 2], positions[k * 2 + 1]],
+          getLineColor: (k: number) => [vis.colors[k * 4], vis.colors[k * 4 + 1], vis.colors[k * 4 + 2], 130],
+          getRadius: (k: number) => vis.radii[k] + 3, radiusUnits: 'pixels', radiusScale: scale, filled: false, stroked: true,
+          lineWidthUnits: 'pixels', getLineWidth: 1.5, updateTriggers: { getPosition: t },
         }),
-        new IconLayer<Shown>({ ...marker, id: 'trains-contour', data: shown, getIcon: (d) => `${d.train.kind}-c`, getColor: pal.terre }),
-        new IconLayer<Shown>({ ...marker, id: 'trains', data: shown, pickable: true, getIcon: (d) => d.train.kind, getColor: (d) => rgb(d.train.op.color) }),
+        new ScatterplotLayer({
+          id: 'trains', pickable: true,
+          data: {
+            length: vis.n,
+            attributes: {
+              getPosition: { value: positions, size: 2 },
+              getFillColor: { value: vis.colors, size: 4 },
+              getRadius: { value: vis.radii, size: 1 },
+            },
+          },
+          radiusUnits: 'pixels', radiusScale: scale, stroked: true, getLineColor: pal.terre, lineWidthUnits: 'pixels', getLineWidth: 0.8,
+        }),
       )
       if (selected) {
+        const c = rgb(selected.train.op.color)
         const sel = [selected]
+        const at = (d: Shown) => [d.pos.lon, d.pos.lat] as [number, number]
         layers.push(
           new ScatterplotLayer<Shown>({
-            id: 'selection', data: sel, getPosition: marker.getPosition, radiusUnits: 'pixels', getRadius: Math.max(14, size * 0.95),
-            stroked: true, filled: false, getLineColor: pal.texte, lineWidthUnits: 'pixels', getLineWidth: 1.5,
-            updateTriggers: { getPosition: t },
+            id: 'selection', data: sel, getPosition: at, radiusUnits: 'pixels', getRadius: 13, stroked: true, filled: false,
+            getLineColor: pal.texte, lineWidthUnits: 'pixels', getLineWidth: 1.5, updateTriggers: { getPosition: t },
           }),
-          new IconLayer<Shown>({ ...marker, id: 'selection-contour', data: sel, getIcon: (d) => `${d.train.kind}-c`, getColor: pal.terre }),
-          new IconLayer<Shown>({ ...marker, id: 'selection-train', data: sel, pickable: true, getIcon: (d) => d.train.kind, getColor: (d) => rgb(d.train.op.color) }),
+          new ScatterplotLayer<Shown>({
+            id: 'selection-train', data: sel, getPosition: at, radiusUnits: 'pixels', getRadius: 6, stroked: true, pickable: true,
+            getFillColor: c, getLineColor: pal.terre, lineWidthUnits: 'pixels', getLineWidth: 2, updateTriggers: { getPosition: t },
+          }),
         )
         if (p.follow) map.jumpTo({ center: [selected.pos.lon, selected.pos.lat] })
       }

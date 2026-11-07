@@ -1,17 +1,12 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// Renfe's GPS feed does not send CORS headers, so the dev server relays it.
-// A deployed version will need the same relay (see README).
+// In development the API comes from the Continent server (LXC 145 by default).
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/renfe': {
-        target: 'https://gtfsrt.renfe.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/renfe/, ''),
-      },
+      '/api': { target: process.env.CONTINENT_API ?? 'http://192.168.1.65:8080', changeOrigin: true },
     },
   },
 })

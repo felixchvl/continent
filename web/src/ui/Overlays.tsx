@@ -1,25 +1,36 @@
 // Floating pieces over the map: hover card and map controls, white and outlined like the mockup.
 
+import { useEffect, useState } from 'react'
 import type { Hover } from '../map/MapView'
 import type { ThemePref, Theme } from '../theme'
+import { fetchDetail } from '../data/live'
+import type { TrainDetail } from '../shared/protocol.ts'
 import { heure } from '../lib/format'
-import { IconButton, Retard, Trait } from './bits'
+import { IconButton, LogoCompagnie, Retard } from './bits'
 
 export function Tooltip({ hover }: { hover: Hover }) {
   const { train, pos } = hover.shown
-  const arrival = pos.seg?.arr
+  const [detail, setDetail] = useState<TrainDetail | null>(null)
+  useEffect(() => {
+    let live = true
+    setDetail(null)
+    const t = setTimeout(() => void fetchDetail(train.id).then((d) => live && setDetail(d)), 120)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [train.id])
+  const next = detail?.next
   const flip = hover.x > window.innerWidth - 320
   return (
     <div className="infobulle" style={{ left: hover.x + (flip ? -16 : 16), top: hover.y + 16, transform: flip ? 'translateX(-100%)' : undefined }}>
       <div className="infobulle-titre">
-        <Trait color={train.op.color} />
+        <LogoCompagnie op={train.op} height={16} />
         <span className="t-corps">{train.name || train.op.name}</span>
       </div>
-      {pos.next && (
-        <span className="t-info">
-          {pos.moving ? `Vers ${pos.next.name}${arrival ? `, arrivée à ${heure(arrival, pos.next.tz)}` : ''}` : `À quai à ${pos.next.name}`}
-        </span>
-      )}
+      <span className="t-info">
+        {next ? (pos.moving ? `Vers ${next.name}${next.arr ? `, arrivée à ${heure(next.arr, next.tz)}` : ''}` : `À quai à ${next.name}`) : '\u00a0'}
+      </span>
       <span className="t-info">
         <Retard pos={pos} /> · {pos.source === 'gps' ? 'position GPS' : 'position estimée'}
         {pos.speed ? ` · ≈ ${Math.round(pos.speed)} km/h` : ''}

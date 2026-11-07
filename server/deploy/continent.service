@@ -1,0 +1,16 @@
+[Unit]
+Description=Continent: web app, API and collection of every train in Europe
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=continent
+WorkingDirectory=/opt/continent/server
+Environment=PORT=8080
+ExecStart=/usr/bin/node src/index.ts
+Restart=always
+RestartSec=5
+MemoryMax=1200M
+
+[Install]
+WantedBy=multi-user.target

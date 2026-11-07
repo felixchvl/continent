@@ -1,329 +1,167 @@
-// Live trains: Transitous (MOTIS) for the whole of Europe, Renfe GPS for Spain.
-// Outside Spain, positions are estimated from timetables + real-time delays, interpolated along the track.
+// Client side of the live data: polls the Continent server (every train in Europe, positions
+// computed server-side) and moves each dot between two updates along its current heading.
 
-import { Line, bearing, decodePolyline, type LonLat } from '../lib/geo'
-import { RENFE, operatorOf, type Operator } from './operators'
+import { parseTrip, statutOf, type Kind, type Source, type Statut, type TripDetails } from '../shared/model.ts'
+import { FLAG_GPS, FLAG_MOVING, FLAG_RT, KINDS, LIVE_STRIDE, type Live, type Meta, type TrainDetail } from '../shared/protocol.ts'
+import type { Operator } from '../shared/operators.ts'
 
-export type Kind = 'gv' | 'cl'
-export type Statut = 'ok' | 'r1' | 'r2'
-export type Source = 'gps' | 'estimee'
+export type { Kind, Source, Statut, TripDetails }
+export type { TripStop } from '../shared/model.ts'
 
-export type Stop = { id: string; name: string; lon: number; lat: number; tz?: string }
-
-export type Seg = {
-  from: Stop
-  to: Stop
-  dep: number
-  arr: number
-  sdep: number
-  sarr: number
-  rt: boolean
-  line: Line
-  dist: number
-}
-
-export type Gps = {
-  lon: number
-  lat: number
-  t: number
-  bearing: number | null
-  next: Stop | null
-  delay: number | null
-  anchor?: { seg: number; along: number }
-}
-
-export type Train = { id: string; name: string; num: string; kind: Kind; op: Operator; segs: Seg[]; gps?: Gps }
-
+export type Train = { id: string; name: string; num: string; kind: Kind; op: Operator }
 export type Pos = {
   lon: number
   lat: number
   bearing: number
-  seg: Seg | null
-  next: Stop | null
-  moving: boolean
+  mps: number
+  speed: number | null
   delay: number
   statut: Statut
   source: Source
-  speed: number | null
+  moving: boolean
   rt: boolean
 }
+export type Shown = { train: Train; pos: Pos }
 
-export const TRANSITOUS = 'https://api.transitous.org/api'
-const KIND: Record<string, Kind> = { HIGHSPEED_RAIL: 'gv', LONG_DISTANCE: 'cl', NIGHT_RAIL: 'cl' }
-export const statutOf = (delay: number): Statut => (delay >= 15 ? 'r2' : delay >= 5 ? 'r1' : 'ok')
-const ms = (s: string | undefined) => (s ? Date.parse(s) : NaN)
-const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z')
-const titleCase = (n: string) => n.toLowerCase().replace(/(^|[\s\-.'’/(])(\p{L})/gu, (_, a: string, b: string) => a + b.toUpperCase())
-export function cleanName(n: string): string {
-  const s = n.replace(/\s+Hall\s.*$/i, '').replace(/\s*\(.*\)$/, '').trim()
-  return /\p{Ll}/u.test(s) ? s : titleCase(s) // some feeds publish station names in capitals
-}
 const digits = (s: string) => (s.match(/\d+/g) ?? []).join('')
-
-type ApiStop = { name: string; stopId: string; lat: number; lon: number; tz?: string }
-type ApiSeg = {
-  trips: { tripId: string; displayName?: string }[]
-  mode: string
-  distance: number
-  from: ApiStop
-  to: ApiStop
-  departure: string
-  arrival: string
-  scheduledDeparture: string
-  scheduledArrival: string
-  realTime: boolean
-  polyline: string
-}
-
-const toStop = (s: ApiStop): Stop => ({ id: s.stopId, name: cleanName(s.name), lon: s.lon, lat: s.lat, tz: s.tz })
-
-async function fetchSegments(now: number): Promise<ApiSeg[]> {
-  const q = new URLSearchParams({
-    zoom: '5', min: '34,-11', max: '62,32', precision: '4',
-    startTime: iso(now - 2 * 60_000), endTime: iso(now + 14 * 60_000),
-  })
-  const res = await fetch(`${TRANSITOUS}/v6/map/trips?${q}`)
-  if (!res.ok) throw new Error(`Transitous ${res.status}`)
-  return res.json()
-}
-
-function buildTrains(segs: ApiSeg[]): Map<string, Train> {
-  const trains = new Map<string, Train>()
-  for (const s of segs) {
-    const kind = KIND[s.mode]
-    const trip = s.trips[0]
-    if (!kind || !trip) continue
-    let t = trains.get(trip.tripId)
-    if (!t) {
-      const name = trip.displayName ?? ''
-      t = { id: trip.tripId, name, num: digits(name), kind, op: operatorOf(trip.tripId), segs: [] }
-      trains.set(t.id, t)
-    }
-    if (t.segs.some((x) => x.from.id === s.from.stopId && x.sdep === ms(s.scheduledDeparture))) continue
-    t.segs.push({
-      from: toStop(s.from), to: toStop(s.to),
-      dep: ms(s.departure), arr: ms(s.arrival), sdep: ms(s.scheduledDeparture), sarr: ms(s.scheduledArrival),
-      rt: s.realTime, line: new Line(decodePolyline(s.polyline, 4)), dist: s.distance,
-    })
-  }
-  for (const t of trains.values()) t.segs.sort((a, b) => a.dep - b.dep)
-  return trains
-}
-
-const delayOf = (s: Seg, end: 'dep' | 'arr') => Math.max(0, ((end === 'arr' ? s.arr - s.sarr : s.dep - s.sdep) || 0) / 60_000)
-/** Average speed over the current stop-to-stop segment, from the drawn track (km/h). */
-function speedOf(s: Seg): number | null {
-  if (s.arr <= s.dep || s.line.points.length < 4) return null
-  const v = s.line.length / 1000 / ((s.arr - s.dep) / 3_600_000)
-  return v > 20 && v < 360 ? v : null
-}
-
-/** Where the train is at time t (ms), or null if it is not running then. */
-export function positionAt(tr: Train, t: number): Pos | null {
-  const g = tr.gps
-  if (g?.anchor) {
-    const seg = tr.segs[g.anchor.seg]
-    const v = seg.line.length / Math.max(60_000, seg.sarr - seg.sdep) // timetable speed, metres per ms
-    const along = Math.min(seg.line.length, g.anchor.along + v * Math.max(0, t - g.t))
-    const p = seg.line.at(along)
-    const delay = g.delay ?? delayOf(seg, 'arr')
-    return { lon: p.lon, lat: p.lat, bearing: p.bearing, seg, next: seg.to, moving: along < seg.line.length, delay, statut: statutOf(delay), source: 'gps', speed: speedOf(seg), rt: true }
-  }
-  if (g) {
-    const delay = g.delay ?? 0
-    return { lon: g.lon, lat: g.lat, bearing: g.bearing ?? 90, seg: null, next: g.next, moving: true, delay, statut: statutOf(delay), source: 'gps', speed: null, rt: true }
-  }
-  const segs = tr.segs
-  if (!segs.length) return null
-  const first = segs[0]
-  const last = segs[segs.length - 1]
-  const atStop = (stop: Stop, s: Seg, endOfLine: boolean, delay: number): Pos => {
-    const b = s.line.at(endOfLine ? s.line.length : 0).bearing
-    return { lon: stop.lon, lat: stop.lat, bearing: b, seg: s, next: stop, moving: false, delay, statut: statutOf(delay), source: 'estimee', speed: null, rt: s.rt }
-  }
-  if (t < first.dep) return first.dep - t > 3 * 60_000 ? null : atStop(first.from, first, false, delayOf(first, 'dep'))
-  if (t >= last.arr) return t - last.arr > 90_000 ? null : atStop(last.to, last, true, delayOf(last, 'arr'))
-  for (let i = 0; i < segs.length; i++) {
-    const s = segs[i]
-    if (t >= s.dep && t < s.arr) {
-      const p = s.line.at(((t - s.dep) / (s.arr - s.dep)) * s.line.length)
-      const delay = delayOf(s, 'arr')
-      return { lon: p.lon, lat: p.lat, bearing: p.bearing, seg: s, next: s.to, moving: true, delay, statut: statutOf(delay), source: 'estimee', speed: speedOf(s), rt: s.rt }
-    }
-    const n = segs[i + 1]
-    if (n && t >= s.arr && t < n.dep) return atStop(s.to, s, true, delayOf(n, 'dep'))
-  }
-  return null
-}
-
-// ---- Renfe GPS (Spain) -------------------------------------------------------------------
-
-type RenfeVP = {
-  header: { timestamp: string }
-  entity: {
-    vehicle: {
-      trip: { tripId: string }
-      position: { latitude: number; longitude: number; bearing?: number }
-      stopId?: string
-      vehicle: { id: string; label?: string }
-    }
-  }[]
-}
-type RenfeTU = { entity: { tripUpdate: { trip: { tripId: string }; delay?: number } }[] }
-
-async function fetchRenfe(): Promise<{ vp: RenfeVP; tu: RenfeTU } | null> {
-  try {
-    const [vp, tu] = await Promise.all([
-      fetch('/renfe/vehicle_positions_LD.json').then((r) => (r.ok ? r.json() : null)),
-      fetch('/renfe/trip_updates_LD.json').then((r) => (r.ok ? r.json() : null)),
-    ])
-    return vp && tu ? { vp, tu } : null
-  } catch {
-    return null
-  }
-}
-
-// ---- Store -----------------------------------------------------------------------------------
+const MAX_EXTRAPOLATION = 25 // seconds: beyond that, wait for the next update
 
 export class LiveStore {
-  trains = new Map<string, Train>()
+  trains: Train[] = []
+  byId = new Map<string, number>()
+  version = -1
   updated = 0
   error: string | null = null
-  private renfeStops = new Map<string, Stop>()
-  private lastFix = new Map<string, { at: LonLat; prev: LonLat | null }>()
-  private lastRenfe: { vp: RenfeVP; tu: RenfeTU } | null = null
+  /** Latest positions, one entry per running train (struct of arrays for speed). */
+  n = 0
+  idx = new Int32Array(0)
+  lon = new Float64Array(0)
+  lat = new Float64Array(0)
+  brg = new Float32Array(0)
+  mps = new Float32Array(0)
+  delay = new Int16Array(0)
+  flags = new Uint8Array(0)
+  /** Index of each train (meta order) in the arrays above, or -1 when not running. */
+  rowOf = new Int32Array(0)
+  private t0 = 0
+  private offset = 0 // server clock - local clock
   private listeners = new Set<() => void>()
-  private timers: ReturnType<typeof setInterval>[] = []
+  private timer: ReturnType<typeof setInterval> | null = null
 
   subscribe(fn: () => void) {
     this.listeners.add(fn)
     return () => void this.listeners.delete(fn)
   }
 
-  private emit() {
-    for (const fn of this.listeners) fn()
-  }
-
   start() {
-    void this.refresh()
-    this.timers.push(setInterval(() => void this.refresh(), 120_000))
-    this.timers.push(setInterval(() => void this.refreshGps(), 30_000))
+    void this.poll()
+    this.timer = setInterval(() => void this.poll(), 10_000)
   }
 
   stop() {
-    this.timers.forEach(clearInterval)
-    this.timers = []
+    if (this.timer) clearInterval(this.timer)
   }
 
-  async refresh() {
+  private async poll() {
     try {
-      const segs = await fetchSegments(Date.now())
-      this.trains = buildTrains(segs)
-      for (const s of segs) {
-        for (const st of [s.from, s.to]) if (st.stopId.includes('RENFE')) this.renfeStops.set(st.stopId.split('_').pop()!, toStop(st))
-      }
+      const live = (await (await fetch('/api/live')).json()) as Live
+      if (live.v !== this.version) await this.loadMeta()
+      this.apply(live)
       this.updated = Date.now()
       this.error = null
-      if (this.lastRenfe) this.applyGps(this.lastRenfe)
-      void this.refreshGps()
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e)
     }
-    this.emit()
+    for (const fn of this.listeners) fn()
   }
 
-  async refreshGps() {
-    const g = await fetchRenfe()
-    if (!g) return
-    this.lastRenfe = g
-    this.applyGps(g)
-    this.emit()
+  private async loadMeta() {
+    const meta = (await (await fetch('/api/meta')).json()) as Meta
+    this.trains = meta.trains.map(([id, name, oi, ki]) => ({ id, name, num: digits(name), op: meta.ops[oi], kind: KINDS[ki] }))
+    this.byId = new Map(this.trains.map((t, i) => [t.id, i]))
+    this.version = meta.v
   }
 
-  private applyGps({ vp, tu }: { vp: RenfeVP; tu: RenfeTU }) {
-    for (const [id, t] of this.trains) {
-      if (id.startsWith('renfe:')) this.trains.delete(id)
-      else delete t.gps
+  private apply(live: Live) {
+    const n = live.d.length / LIVE_STRIDE
+    if (live.v !== this.version) return // meta changed again meanwhile: next poll
+    if (this.idx.length < n) {
+      const cap = Math.ceil(n * 1.2)
+      this.idx = new Int32Array(cap); this.lon = new Float64Array(cap); this.lat = new Float64Array(cap)
+      this.brg = new Float32Array(cap); this.mps = new Float32Array(cap); this.delay = new Int16Array(cap); this.flags = new Uint8Array(cap)
     }
-    const byNum = new Map<string, Train>()
-    for (const t of this.trains.values()) if (t.op.id === 'renfe' && t.num) byNum.set(t.num.padStart(5, '0'), t)
-    const delays = new Map(tu.entity.map((e) => [e.tripUpdate.trip.tripId.slice(0, 5), (e.tripUpdate.delay ?? 0) / 60]))
-    const ts = Number(vp.header.timestamp) * 1000 || Date.now()
-    const seen = new Set<string>()
-    for (const { vehicle: v } of vp.entity) {
-      const lon = v.position.longitude
-      const lat = v.position.latitude
-      const cell = `${Math.round(lat * 500)},${Math.round(lon * 500)}`
-      if (seen.has(cell)) continue // coupled units report the same position
-      seen.add(cell)
-      const num = (v.vehicle.label ?? v.vehicle.id).slice(0, 5)
-      const fix = this.lastFix.get(num)
-      const moved = fix && (fix.at[0] !== lon || fix.at[1] !== lat)
-      const prev = moved ? fix.at : (fix?.prev ?? null)
-      this.lastFix.set(num, { at: [lon, lat], prev })
-      const next = v.stopId ? (this.renfeStops.get(v.stopId) ?? null) : null
-      const b = v.position.bearing ?? (prev ? bearing(prev, [lon, lat]) : next ? bearing([lon, lat], [next.lon, next.lat]) : null)
-      const gps: Gps = { lon, lat, t: ts, bearing: b, next, delay: delays.get(num) ?? delays.get(v.trip.tripId.slice(0, 5)) ?? null }
-      const train = byNum.get(num)
-      if (train) {
-        let best: { seg: number; along: number; off: number } | null = null
-        train.segs.forEach((s, i) => {
-          const p = s.line.project([lon, lat])
-          if (!best || p.off < best.off) best = { seg: i, along: p.along, off: p.off }
-        })
-        const b2 = best as { seg: number; along: number; off: number } | null
-        if (b2 && b2.off < 3000) gps.anchor = { seg: b2.seg, along: b2.along }
-        train.gps = gps
-      } else {
-        const id = `renfe:${num}`
-        this.trains.set(id, { id, name: `Renfe ${Number(num)}`, num: String(Number(num)), kind: 'cl', op: RENFE, segs: [], gps })
-      }
+    this.rowOf = new Int32Array(this.trains.length).fill(-1)
+    const d = live.d
+    for (let r = 0; r < n; r++) {
+      const o = r * LIVE_STRIDE
+      this.idx[r] = d[o]
+      this.lon[r] = d[o + 1] / 1e5
+      this.lat[r] = d[o + 2] / 1e5
+      this.brg[r] = d[o + 3]
+      this.mps[r] = d[o + 4] / 10
+      this.delay[r] = d[o + 5]
+      this.flags[r] = d[o + 6]
+      this.rowOf[d[o]] = r
+    }
+    this.n = n
+    this.t0 = live.t
+    this.offset = live.t - Date.now()
+  }
+
+  /** Position of row r at local time t, moved along its heading since the server computed it. */
+  project(r: number, t: number, out: Float64Array, o: number) {
+    let lon = this.lon[r]
+    let lat = this.lat[r]
+    if (this.flags[r] & FLAG_MOVING) {
+      const dt = Math.min(MAX_EXTRAPOLATION, Math.max(0, (t + this.offset - this.t0) / 1000))
+      const dist = this.mps[r] * dt
+      const b = (this.brg[r] * Math.PI) / 180
+      lon += (dist * Math.sin(b)) / (111_320 * Math.cos((lat * Math.PI) / 180))
+      lat += (dist * Math.cos(b)) / 110_574
+    }
+    out[o] = lon
+    out[o + 1] = lat
+  }
+
+  pos(r: number, t: number): Pos {
+    const xy = new Float64Array(2)
+    this.project(r, t, xy, 0)
+    const f = this.flags[r]
+    const kmh = this.mps[r] * 3.6
+    const delay = this.delay[r]
+    return {
+      lon: xy[0], lat: xy[1], bearing: this.brg[r], mps: this.mps[r], speed: kmh > 20 && kmh < 360 ? kmh : null,
+      delay, statut: statutOf(delay), source: f & FLAG_GPS ? 'gps' : 'estimee', moving: !!(f & FLAG_MOVING), rt: !!(f & FLAG_RT),
     }
   }
-}
 
-// ---- Trip details ------------------------------------------------------------------------------
+  get(id: string, t = Date.now()): Shown | null {
+    const i = this.byId.get(id)
+    if (i === undefined) return null
+    const r = this.rowOf[i] ?? -1
+    return r < 0 ? null : { train: this.trains[i], pos: this.pos(r, t) }
+  }
 
-export type TripStop = {
-  id: string
-  name: string
-  lon: number
-  lat: number
-  tz?: string
-  arr?: number
-  sarr?: number
-  dep?: number
-  sdep?: number
-  track?: string
-  cancelled?: boolean
-}
-
-export type TripDetails = { id: string; name: string; number: string; category: string; agency: string; stops: TripStop[]; line: Line; rt: boolean }
-
-type ApiTripStop = ApiStop & {
-  arrival?: string; scheduledArrival?: string; departure?: string; scheduledDeparture?: string; track?: string; cancelled?: boolean
+  /** Every running train with its position at time t (for counters and lists, not for drawing). */
+  all(t = Date.now()): Shown[] {
+    const out: Shown[] = []
+    for (let r = 0; r < this.n; r++) out.push({ train: this.trains[this.idx[r]], pos: this.pos(r, t) })
+    return out
+  }
 }
 
 export async function fetchTrip(id: string): Promise<TripDetails> {
-  const res = await fetch(`${TRANSITOUS}/v5/trip?tripId=${encodeURIComponent(id)}`)
-  if (!res.ok) throw new Error(`Transitous ${res.status}`)
-  const j = await res.json()
-  const leg = j.legs.find((l: { tripId: string }) => l.tripId === id) ?? j.legs[0]
-  const raw: ApiTripStop[] = [leg.from, ...(leg.intermediateStops ?? []), leg.to]
-  const stops = raw.map((s) => ({
-    id: s.stopId, name: cleanName(s.name), lon: s.lon, lat: s.lat, tz: s.tz,
-    arr: ms(s.arrival) || undefined, sarr: ms(s.scheduledArrival) || undefined,
-    dep: ms(s.departure) || undefined, sdep: ms(s.scheduledDeparture) || undefined,
-    track: s.track, cancelled: s.cancelled,
-  }))
-  const name: string = leg.displayName ?? ''
-  const number: string = leg.tripShortName || digits(name)
-  return {
-    id, name, number,
-    category: name.replace(number, '').trim(),
-    agency: leg.agencyName ?? '',
-    stops,
-    line: new Line(decodePolyline(leg.legGeometry.points, leg.legGeometry.precision ?? 6)),
-    rt: !!leg.realTime,
-  }
+  const res = await fetch(`/api/trip?id=${encodeURIComponent(id)}`)
+  if (!res.ok) throw new Error(`serveur ${res.status}`)
+  return parseTrip(await res.json(), id)
+}
+
+const details = new Map<string, { at: number; d: TrainDetail | null }>()
+export async function fetchDetail(id: string): Promise<TrainDetail | null> {
+  const hit = details.get(id)
+  if (hit && Date.now() - hit.at < 15_000) return hit.d
+  const res = await fetch(`/api/train/${encodeURIComponent(id)}`)
+  const d = res.ok ? ((await res.json()) as TrainDetail) : null
+  details.set(id, { at: Date.now(), d })
+  return d
 }

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import type { Pos } from '../data/live'
+import type { Operator } from '../shared/operators.ts'
 import { Icon, type IconName } from './Icon'
 
 export function Retard({ pos }: { pos: Pick<Pos, 'delay' | 'rt'> }) {
@@ -23,3 +24,9 @@ export function IconButton({ icon, label, onClick, active, disabled, children }:
 
 /** Operator mark: a short bar in the operator's colour, like the line on the timeline. */
 export const Trait = ({ color }: { color: string }) => <i className="trait-compagnie" style={{ background: color }} />
+
+/** The operator's logo (as in the mockup); its colour swatch when there is no logo. */
+export function LogoCompagnie({ op, height = 20 }: { op: Operator; height?: number }) {
+  if (!op.logo) return <i className="pastille-compagnie" style={{ background: op.color, width: height, height }} aria-label={op.name} />
+  return <img className="logo-compagnie" src={`/logos/${op.logo}`} alt={op.name} style={{ height }} />
+}

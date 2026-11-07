@@ -2,12 +2,11 @@
 // operator's colour, a dot per station, station names large, details written as sentences.
 
 import type { CSSProperties } from 'react'
-import type { Shown } from '../map/MapView'
-import type { TripDetails, TripStop } from '../data/live'
-import type { Operator } from '../data/operators'
+import type { Shown, TripDetails, TripStop } from '../data/live'
+import type { Operator } from '../shared/operators.ts'
 import { duree, heure, jour } from '../lib/format'
 import { Icon } from './Icon'
-import { IconButton, Retard } from './bits'
+import { IconButton, LogoCompagnie, Retard } from './bits'
 
 type Props = {
   trainId: string
@@ -69,7 +68,7 @@ export function TrainSheet(p: Props) {
 
       <div className="fiche-defile">
         <div className="voyage">
-          <span className="pastille-compagnie" />
+          <span className="logo-titre">{op ? <LogoCompagnie op={op} height={24} /> : <span className="pastille-compagnie" />}</span>
           <div>
             <h1 className="t-voyage">{last ? `${name} vers ${last.name}` : name}</h1>
             <p className="t-info">{[op && op.id !== 'autre' ? op.name : trip?.agency, dep ? jour(dep) : ''].filter(Boolean).join(', ')}</p>
