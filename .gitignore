@@ -3,8 +3,8 @@ node_modules/
 *.local
 
 # Local files kept out of the repository
-_ancien/
-logos/
+/_ancien/
+/logos/
 
 # Mockup by-products (Mapbox satellite imagery, renders, Blender file)
 design/**/*.jpg
