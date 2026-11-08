@@ -50,6 +50,10 @@ const LIST: [prefix: string, id: string, name: string, color: string, qid: strin
 
 export const OTHER: Operator = { id: 'autre', name: 'Autres', color: '#8A8A8A' }
 export const RENFE: Operator = { id: 'renfe', name: 'Renfe', color: '#8A1C76', qid: 'Q2476154', logo: 'renfe.svg' }
+/** Hand-picked logos by Wikidata id (public/logos): the library takes them when Wikidata has none. */
+export const OPERATOR_LOGOS: Record<string, string> = Object.fromEntries(
+  [...LIST.filter((l) => l[5]).map((l) => [l[4], l[5]!]), [RENFE.qid!, RENFE.logo!]],
+)
 
 /** Wikidata ids of the operators above: the library of actors always includes them. */
 export const OPERATOR_QIDS = LIST.map((o) => o[4])

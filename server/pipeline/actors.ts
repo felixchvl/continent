@@ -11,9 +11,9 @@
 // 4. silver.actor holds the library; silver.actor_name every operator or network name written in
 //    OpenStreetMap, with the actor it points to when known (to link names without ids later).
 import pg from 'pg'
-import { access, mkdir, writeFile } from 'node:fs/promises'
+import { access, copyFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { OPERATOR_QIDS } from '../../web/src/shared/operators.ts'
+import { OPERATOR_LOGOS, OPERATOR_QIDS } from '../../web/src/shared/operators.ts'
 
 const UA = 'Continent/1.0 (https://github.com/felixchvl/continent)'
 const LOGOS = process.env.LOGOS ?? '/var/lib/continent/logos'
@@ -149,6 +149,13 @@ const count = (k: string) => statuses.set(k, (statuses.get(k) ?? 0) + 1)
  * Wikimedia throttles bursts (429): wait as long as it asks, or longer each time, then try again.
  */
 async function fetchLogo(qid: string, source: string, previous: { source: string | null; file: string | null } | undefined) {
+  if (source.startsWith('local:')) {
+    // A hand-picked logo of the web app (public/logos), copied as it is.
+    const name = source.slice(6)
+    const local = `${qid}${name.slice(name.lastIndexOf('.'))}`
+    await copyFile(join(import.meta.dirname, '../../web/public/logos', name), join(LOGOS, local))
+    return (count('hand-picked'), local)
+  }
   const file = decodeURIComponent(source.slice(source.lastIndexOf('/') + 1))
   const lower = file.toLowerCase()
   const ext = lower.endsWith('.svg') ? '.svg' : lower.endsWith('.png') ? '.png' : /\.jpe?g$/.test(lower) ? '.jpg' : null
@@ -178,7 +185,8 @@ async function fetchLogo(qid: string, source: string, previous: { source: string
   return (count('throttled'), null)
 }
 
-// Logos Wikidata does not have, from Commons (free licences): the manager of 3,000 French stations.
+// Logos Wikidata does not have, from Commons (free licences): the manager of 3,000 French stations. Failing
+// those, the web app's hand-picked logos (Île-de-France Mobilités).
 const LOGO_OVERRIDES: Record<string, string> = {
   Q3098278: 'http://commons.wikimedia.org/wiki/Special:FilePath/200914%20LOGO%20SNCF%20GC%20RGB.png', // SNCF Gares & Connexions, CC BY-SA 4.0
 }
@@ -229,7 +237,8 @@ async function main() {
     .filter((a) => a.name) // no label at all: a deleted or merged item
     .map((a) => {
       const kinds = kindsOf(a.types, labels)
-      return { ...a, kind: kinds[0], kinds, logo_source: a.logo_source ?? LOGO_OVERRIDES[a.qid] ?? null, logo_file: null as string | null }
+      const handPicked = OPERATOR_LOGOS[a.qid] ? `local:${OPERATOR_LOGOS[a.qid]}` : null
+      return { ...a, kind: kinds[0], kinds, logo_source: a.logo_source ?? LOGO_OVERRIDES[a.qid] ?? handPicked, logo_file: null as string | null }
     })
     .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || weight(b.qid) - weight(a.qid))
   for (const a of done) {
