@@ -12,6 +12,8 @@ A live map of Europe's trains: Flighty and Flightradar, for rail. Web first, the
   (`?vue=bibliotheque`); the logos of a train's line and network (RER + B, S-Bahn + S1) in its tooltip
   and sheet.
 - Stations with their names from zoom 10; the map position is kept in the address (`#zoom/lat/lon`).
+- `?perf` shows a frame-time readout (frames per second, worst frame, missed frames, freezes) to measure
+  the map in any browser.
 - Spain: real GPS positions from Renfe. Elsewhere: positions estimated from timetables and real-time delays,
   interpolated along the track (Transitous / MOTIS). Every train says which of the two it is.
 - Train sheet: times, delay, progress, stop timeline, route drawn on the map, camera follow, and the

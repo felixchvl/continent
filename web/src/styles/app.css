@@ -224,3 +224,10 @@ ol, ul { list-style: none; }
   .biblio-grille { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .biblio-detail { left: 16px; right: 16px; bottom: 16px; width: auto; }
 }
+
+/* Frame-time readout (?perf), centred above the map. */
+.perf {
+  position: absolute; top: 16px; left: 50%; z-index: 5; transform: translateX(-50%);
+  padding: 6px 10px; background: var(--fond); border: 1px solid var(--trait); border-radius: var(--rayon);
+  font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}

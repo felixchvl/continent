@@ -5,6 +5,7 @@ import { RENFE, operatorOf, type Operator } from './shared/operators.ts'
 import { useTheme } from './theme'
 import { useFollowed } from './useFollowed'
 import { Bibliotheque } from './ui/Bibliotheque'
+import { Perf } from './ui/Perf'
 import { Panel, type Stats } from './ui/Panel'
 import { TrainSheet } from './ui/TrainSheet'
 import { MapControls, Tooltip } from './ui/Overlays'
@@ -33,6 +34,7 @@ export default function App() {
   const [showNetwork, setShowNetwork] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(location.search).get('train'))
   const [library, setLibrary] = useState(() => new URLSearchParams(location.search).get('vue') === 'bibliotheque')
+  const perf = new URLSearchParams(location.search).has('perf') // frame-time readout, see ui/Perf.tsx
   const [trip, setTrip] = useState<TripDetails | null>(null)
   const [tripLoading, setTripLoading] = useState(false)
   const [tripError, setTripError] = useState<string | null>(null)
@@ -230,6 +232,7 @@ export default function App() {
 
       {hover && !mobile && hover.shown.train.id !== selectedId && <Tooltip hover={hover} />}
       {library && <Bibliotheque onClose={() => setLibrary(false)} />}
+      {perf && <Perf />}
     </div>
   )
 }
