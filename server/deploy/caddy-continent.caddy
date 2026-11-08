@@ -1,0 +1,14 @@
+# Continent (LXC 145): the web app and its API, public and read-only.
+# The API answers are already gzipped by the server; encode compresses the rest (the 2.7 MB script).
+# Needs a DNS A record continent.felixchevalier.fr -> the home public IP (Infomaniak).
+
+continent.felixchevalier.fr {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	reverse_proxy 192.168.1.65:8080
+}

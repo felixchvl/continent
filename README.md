@@ -31,9 +31,13 @@ npm run dev
   split in four whenever the API answers "too many trips";
 - every 30 seconds it fetches Renfe's GPS positions and snaps them onto the Spanish trains;
 - every 5 seconds it computes where each train is; the web app polls `/api/meta` (who the trains are)
-  and `/api/live` (positions as integers, about 30 KB gzipped) and moves each dot in between;
+  and `/api/live` (positions as integers, 30 to 100 KB gzipped) and moves each dot in between;
 - it stores trains, stop-to-stop segments with their delays, and GPS fixes in PostgreSQL
   (`bronze` = what was fetched, `silver` = cleaned rows) for later statistics.
+
+The site is public at **https://continent.felixchevalier.fr**: DNS at Infomaniak → home public IP → the
+home Caddy (LXC 110, [`server/deploy/caddy-continent.caddy`](server/deploy/caddy-continent.caddy), installed
+as `/etc/caddy/sites/public/40-continent.caddy`) → the server on 192.168.1.65:8080.
 
 `./deploy.sh` pulls main on the server, builds the web app and restarts the `continent` service.
 In development, Vite proxies `/api` to the server (`CONTINENT_API` to point elsewhere).
