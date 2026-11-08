@@ -103,3 +103,16 @@ export async function prune() {
     delete from bronze.renfe where fetched_at < now() - interval '3 days';
     delete from silver.gps_fix where ts < now() - interval '60 days';`).catch((e) => console.warn('db: prune', e.message))
 }
+
+/** The library of actors (silver.actor, built by pipeline/actors.ts), most present first; [] before the first run. */
+export async function actors(): Promise<unknown[]> {
+  if (!pool) return []
+  try {
+    const { rows } = await pool.query(`
+      select qid, name, kind, kinds, country, colour, website, logo_file as logo, lines, stations, parents
+      from silver.actor order by lines + stations desc, name`)
+    return rows
+  } catch {
+    return [] // table not built yet
+  }
+}

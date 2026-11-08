@@ -1,5 +1,5 @@
-// The library of actors of European rail: operators, networks, transport authorities, infrastructure
-// managers, regions and cities. Run by osm.sh after silver.sql.
+// The library of actors of European rail: operators, brands, networks, lines, transport authorities,
+// infrastructure managers, regions and cities. Run by osm.sh after silver.sql.
 //
 // 1. Every Wikidata id that OpenStreetMap gives for a line or a station (operator, network, the line
 //    itself) is an actor; their parent organisations are added too (two levels).
@@ -20,20 +20,23 @@ const db = new pg.Pool({ host: '/var/run/postgresql', database: process.env.DB ?
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(0, 19).replace('T', ' '), ...a)
 
-type Kind = 'exploitant' | 'reseau' | 'autorite' | 'infrastructure' | 'collectivite' | 'autre'
+type Kind = 'ligne' | 'marque' | 'autorite' | 'reseau' | 'exploitant' | 'infrastructure' | 'collectivite' | 'autre'
 type Actor = {
-  qid: string; name: string; name_fr: string | null; name_en: string | null; kind: Kind; types: string[]
+  qid: string; name: string; name_fr: string | null; name_en: string | null; kind: Kind; kinds: Kind[]; types: string[]
   country: string | null; territory: string | null; parents: string[]; colour: string | null; website: string | null
   logo_source: string | null; logo_file: string | null
 }
 
-// What a Wikidata class says about the actor, matched on its French and English labels, in this order.
+// What the actor's Wikidata classes say it is, matched on their French and English labels. An actor
+// can be several things (CFL runs trains and manages the tracks); its main kind is the first match.
 const KIND_RULES: [RegExp, Kind][] = [
+  [/\b(ligne|line)\b|ligne de (métro|tram)|s-bahn line/i, 'ligne'],
+  [/marque|\bbrand|train service|service ferroviaire|train category|catégorie de train|type of train/i, 'marque'],
   [/autorité organisatrice|transport authority|transit authority|verkehrsverbund|tarifverbund|organising authority|passenger transport executive|transport association|communauté tarifaire|syndicat (mixte )?de transport/i, 'autorite'],
+  [/réseau|network|rapid transit|metro system|système de métro|tramway|tram system|s-bahn|commuter rail|light rail|transit system|suburban railway|funicular|\brer\b/i, 'reseau'],
+  [/entreprise ferroviaire|railway company|train operating company|\boperator|exploitant|transport company|company|entreprise|société|business|enterprise|state.owned|public undertaking/i, 'exploitant'],
   [/gestionnaire d.infrastructure|infrastructure manager|railway infrastructure|infrastructure company/i, 'infrastructure'],
-  [/réseau|network|rapid transit|metro system|système de métro|tramway|tram system|s-bahn|commuter rail|light rail|transit system|suburban railway|funicular|rer\b/i, 'reseau'],
-  [/région|region|state of germany|land d.allemagne|département|county|canton|province|municipality|commune|city|ville|administrative|territorial|autonomous community|voivodeship|oblast/i, 'collectivite'],
-  [/entreprise ferroviaire|railway company|train operating company|operator|exploitant|transport company|company|entreprise|société|business|enterprise|state.owned|public undertaking|organi[sz]ation/i, 'exploitant'],
+  [/\b(régions?|regions?)\b|state of germany|land d.allemagne|\bdépartement|\bcounty\b|\bcanton\b|\bprovince\b|\bmunicipality|\bcommunes?\b|\bcity\b|\bvilles?\b|administrative|territorial|autonomous community|voivodeship|oblast/i, 'collectivite'],
 ]
 
 async function sparql<T>(query: string): Promise<T[]> {
@@ -59,8 +62,8 @@ const chunks = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.lengt
 
 type Row = Record<'item' | 'fr' | 'en' | 'mul' | 'logo' | 'colour' | 'cc' | 'website' | 'parent' | 'type' | 'territory', string | undefined>
 
-async function describe(qids: string[]): Promise<Map<string, Omit<Actor, 'kind' | 'logo_file'>>> {
-  const out = new Map<string, Omit<Actor, 'kind' | 'logo_file'>>()
+async function describe(qids: string[]): Promise<Map<string, Omit<Actor, 'kind' | 'kinds' | 'logo_file'>>> {
+  const out = new Map<string, Omit<Actor, 'kind' | 'kinds' | 'logo_file'>>()
   for (const part of chunks(qids, 250)) {
     const rows = await sparql<Row>(`SELECT ?item ?fr ?en ?mul ?logo ?colour ?cc ?website ?parent ?type ?territory WHERE {
       VALUES ?item { ${values(part)} }
@@ -113,9 +116,10 @@ async function typeLabels(qids: string[]): Promise<Map<string, string>> {
   return labels
 }
 
-function kindOf(types: string[], labels: Map<string, string>): Kind {
+function kindsOf(types: string[], labels: Map<string, string>): Kind[] {
   const text = types.map((t) => labels.get(t) ?? '').join(' | ')
-  return KIND_RULES.find(([re]) => re.test(text))?.[1] ?? 'autre'
+  const kinds = KIND_RULES.filter(([re]) => re.test(text)).map(([, k]) => k)
+  return kinds.length ? kinds : ['autre']
 }
 
 /** Downloads a logo from Commons unless the same file was already fetched; returns the local file name. */
@@ -148,6 +152,7 @@ async function main() {
       qid text primary key, name text not null, name_fr text, name_en text, kind text not null, types text[] not null,
       country text, territory text, parents text[] not null, colour text, website text,
       logo_source text, logo_file text, lines int not null default 0, stations int not null default 0, updated timestamptz not null default now());
+    alter table silver.actor add column if not exists kinds text[];
     create table if not exists silver.actor_name (
       name text not null, role text not null, qid text, lines int not null, stations int not null, primary key (name, role));`)
 
@@ -189,7 +194,8 @@ async function main() {
       }
       if (logo_file) logos++
     }
-    done.push({ ...a, kind: kindOf(a.types, labels), logo_file })
+    const kinds = kindsOf(a.types, labels)
+    done.push({ ...a, kind: kinds[0], kinds, logo_file })
   }
   log(`${done.length} actors, ${logos} logos`)
 
@@ -200,8 +206,8 @@ async function main() {
     await client.query('truncate silver.actor, silver.actor_name')
     for (const part of chunks(done, 500)) {
       await client.query(
-        `insert into silver.actor (qid, name, name_fr, name_en, kind, types, country, territory, parents, colour, website, logo_source, logo_file, lines, stations)
-         select * from jsonb_to_recordset($1::jsonb) as x(qid text, name text, name_fr text, name_en text, kind text, types text[], country text,
+        `insert into silver.actor (qid, name, name_fr, name_en, kind, kinds, types, country, territory, parents, colour, website, logo_source, logo_file, lines, stations)
+         select * from jsonb_to_recordset($1::jsonb) as x(qid text, name text, name_fr text, name_en text, kind text, kinds text[], types text[], country text,
            territory text, parents text[], colour text, website text, logo_source text, logo_file text, lines int, stations int)`,
         [JSON.stringify(part.map((a) => ({ ...a, lines: counts.get(a.qid)?.lines ?? 0, stations: counts.get(a.qid)?.stations ?? 0 })))],
       )

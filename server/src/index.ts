@@ -18,6 +18,8 @@ const PORT = Number(process.env.PORT ?? 8080)
 const DIST = resolve(import.meta.dirname, process.env.DIST ?? '../../web/dist')
 // Vector tiles built by web/scripts/build-rail.sh (gzipped .pbf in z/x/y folders), one folder per set.
 const TILES = process.env.TILES ?? '/var/lib/continent/tiles'
+// Logos of the library of actors, downloaded from Wikimedia Commons by pipeline/actors.ts.
+const LOGOS = process.env.LOGOS ?? '/var/lib/continent/logos'
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...a)
 
 // ---- State ----------------------------------------------------------------------------------
@@ -29,6 +31,7 @@ let order: Train[] = []
 let version = 0
 let metaBody: Buffer = gzipSync('{"v":0,"ops":[],"trains":[]}')
 let liveBody: Buffer = gzipSync('{"t":0,"v":0,"d":[]}')
+let actorsBody: Buffer = gzipSync('[]')
 const health = { lastCollect: 0, collectMs: 0, segments: 0, trains: 0, running: 0, renfe: 0, errors: 0 }
 
 // Trains seen in the last 24 hours: the only ids /api/trip forwards to Transitous.
@@ -183,6 +186,27 @@ async function serveStatic(res: ServerResponse, path: string) {
   }
 }
 
+const LOGO_PATH = /^\/logos\/(Q\d{1,12}\.(svg|png|jpg))$/
+const LOGO_TYPE: Record<string, string> = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg' }
+
+/** A logo from Commons. SVGs come from elsewhere: no script may run even if one is opened directly. */
+async function serveLogo(res: ServerResponse, m: RegExpMatchArray) {
+  try {
+    const body = await readFile(join(LOGOS, m[1]))
+    send(res, 200, body, LOGO_TYPE[m[2]], {
+      'Cache-Control': 'public, max-age=86400',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox",
+      'X-Content-Type-Options': 'nosniff',
+    })
+  } catch {
+    send(res, 404, 'Not found', 'text/plain')
+  }
+}
+
+async function loadActors() {
+  actorsBody = gzipSync(JSON.stringify(await db.actors()))
+}
+
 const TILE_PATH = /^\/tiles\/([a-z]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.pbf$/
 
 /** A vector tile, already gzipped on disk; a tile with nothing in it answers 204, which maps read as empty.
@@ -219,7 +243,12 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if (!seen.has(id)) return send(res, 404, '{}', 'application/json')
     return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'public, max-age=30' })
   }
+  if (url.pathname === '/api/actors') {
+    return send(res, 200, actorsBody, 'application/json', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=3600' })
+  }
   if (url.pathname.startsWith('/api/')) return send(res, 404, '{}', 'application/json')
+  const logo = url.pathname.match(LOGO_PATH)
+  if (logo) return serveLogo(res, logo)
   const tile = url.pathname.match(TILE_PATH)
   if (tile) return serveTile(res, tile)
   if (url.pathname.startsWith('/tiles/')) return send(res, 404, 'Not found', 'text/plain')
@@ -245,3 +274,6 @@ void renfeLoop().then(collectLoop)
 setInterval(renfeLoop, 30_000)
 setInterval(rebuildLive, 5_000)
 setInterval(() => void db.prune(), 3_600_000)
+// The library changes once a month (pipeline/osm.sh): reloading it every hour is plenty.
+void loadActors()
+setInterval(() => void loadActors(), 3_600_000)
