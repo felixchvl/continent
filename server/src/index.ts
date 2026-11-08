@@ -12,6 +12,7 @@ import { applyRenfe, buildTrains, indexRenfeStops, positionAt, type RenfeState, 
 import { FLAG_GPS, FLAG_MOVING, FLAG_RT, KINDS, type Meta, type TrainDetail } from '../../web/src/shared/protocol.ts'
 import type { Operator } from '../../web/src/shared/operators.ts'
 import { Busy, collect, tileCount, trip } from './transitous.ts'
+import { urbanTile } from './urbain.ts'
 import * as db from './db.ts'
 
 const PORT = Number(process.env.PORT ?? 8080)
@@ -242,6 +243,12 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if (!id || id.length > 200) return send(res, 400, '{}', 'application/json')
     if (!seen.has(id)) return send(res, 404, '{}', 'application/json')
     return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'public, max-age=30' })
+  }
+  const urban = url.pathname.match(/^\/api\/urbain\/12\/(\d{1,4})\/(\d{1,4})$/)
+  if (urban) {
+    const [x, y] = [Number(urban[1]), Number(urban[2])]
+    if (x >= 4096 || y >= 4096) return send(res, 400, '{}', 'application/json')
+    return send(res, 200, await urbanTile(x, y), 'application/json', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=20' })
   }
   if (url.pathname === '/api/actors') {
     return send(res, 200, actorsBody, 'application/json', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=3600' })

@@ -14,6 +14,7 @@ import { token, type RGBA, type Theme } from '../theme'
 import { FLAG_GPS } from '../shared/protocol.ts'
 import { hexToRgb } from '../shared/operators.ts'
 import type { LiveStore, Shown, TripDetails, TripStop } from '../data/live'
+import { URBAN_MIN_ZOOM, UrbanStore, type UrbanVehicle } from '../data/urbain'
 import type { LonLat } from '../shared/geo.ts'
 
 export type Filters = { gv: boolean; cl: boolean; reg: boolean; gps: boolean; estimee: boolean; op: string | null }
@@ -119,6 +120,15 @@ export function MapView(props: Props) {
     const buf = [new Float32Array(0), new Float32Array(0)]
     let flip = 0
     const scratch = new Float64Array(2)
+
+    // Metros and trams, fetched per zoom-12 tile when the map is close enough to a city.
+    const urban = new UrbanStore()
+    const updateUrban = () => {
+      const b = map.getBounds()
+      if (b) urban.update({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }, map.getZoom())
+    }
+    map.on('moveend', updateUrban)
+    const urbanTimer = setInterval(updateUrban, 10_000)
 
     const shownAt = (k: number): Shown => {
       const s = propsRef.current.store
@@ -281,6 +291,21 @@ export function MapView(props: Props) {
         })
       }
 
+      if (zoom >= URBAN_MIN_ZOOM && urban.vehicles.length) {
+        const shown: { v: UrbanVehicle; at: [number, number] }[] = []
+        for (const v of urban.vehicles) {
+          const at = UrbanStore.position(v, t)
+          if (at) shown.push({ v, at })
+        }
+        layers.push(
+          new ScatterplotLayer<{ v: UrbanVehicle; at: [number, number] }>({
+            id: 'urbain', data: shown, getPosition: (d) => d.at, radiusUnits: 'pixels', getRadius: 3.2, stroked: true,
+            getFillColor: (d) => (d.v.color ? rgb(d.v.color) : pal.neutre), getLineColor: pal.terre, lineWidthUnits: 'pixels', getLineWidth: 0.8,
+            updateTriggers: { getPosition: t, getFillColor: `${urban.version}-${p.theme}` },
+          }),
+        )
+      }
+
       layers.push(
         new ScatterplotLayer({
           id: 'trains-gps', data: vis.gps, getPosition: (k: number) => [positions[k * 2], positions[k * 2 + 1]],
@@ -359,6 +384,7 @@ export function MapView(props: Props) {
 
     return () => {
       cancelAnimationFrame(raf)
+      clearInterval(urbanTimer)
       map.remove()
       mapRef.current = null
     }
