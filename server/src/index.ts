@@ -11,7 +11,7 @@ import { gzipSync } from 'node:zlib'
 import { applyRenfe, buildTrains, indexRenfeStops, positionAt, type RenfeState, type RenfeTU, type RenfeVP, type Train } from '../../web/src/shared/model.ts'
 import { FLAG_GPS, FLAG_MOVING, FLAG_RT, KINDS, type Meta, type TrainDetail } from '../../web/src/shared/protocol.ts'
 import type { Operator } from '../../web/src/shared/operators.ts'
-import { collect, tileCount, trip } from './transitous.ts'
+import { Busy, collect, tileCount, trip } from './transitous.ts'
 import * as db from './db.ts'
 
 const PORT = Number(process.env.PORT ?? 8080)
@@ -29,8 +29,21 @@ let metaBody: Buffer = gzipSync('{"v":0,"ops":[],"trains":[]}')
 let liveBody: Buffer = gzipSync('{"t":0,"v":0,"d":[]}')
 const health = { lastCollect: 0, collectMs: 0, segments: 0, trains: 0, running: 0, renfe: 0, errors: 0 }
 
+// Trains seen in the last 24 hours: the only ids /api/trip forwards to Transitous.
+const seen = new Map<string, number>()
+let seenPruned = Date.now()
+
+function remember(list: Train[]) {
+  const now = Date.now()
+  for (const t of list) seen.set(t.id, now)
+  if (now - seenPruned < 3_600_000) return
+  for (const [id, at] of seen) if (now - at > 86_400_000) seen.delete(id)
+  seenPruned = now
+}
+
 function rebuildMeta() {
   order = [...trains.values()]
+  remember(order)
   const ops: Operator[] = []
   const opIndex = new Map<string, number>()
   const rows = order.map((t) => {
@@ -139,8 +152,19 @@ function detail(id: string): TrainDetail | null {
   }
 }
 
+/** Thrown for a request that cannot be read (malformed address or encoding): answered 400. */
+class BadRequest extends Error {}
+
+function decode(s: string): string {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    throw new BadRequest('bad encoding')
+  }
+}
+
 async function serveStatic(res: ServerResponse, path: string) {
-  const rel = normalize(decodeURIComponent(path)).replace(/^(\.\.[/\\])+/, '')
+  const rel = normalize(decode(path)).replace(/^(\.\.[/\\])+/, '')
   let file = join(DIST, rel)
   try {
     if (!(await stat(file)).isFile()) throw new Error('dir')
@@ -156,27 +180,43 @@ async function serveStatic(res: ServerResponse, path: string) {
   }
 }
 
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url ?? '/', 'http://localhost')
+async function handle(req: IncomingMessage, res: ServerResponse) {
+  let url: URL
   try {
-    if (url.pathname === '/api/meta') return sendGzipJson(req, res, metaBody)
-    if (url.pathname === '/api/live') return sendGzipJson(req, res, liveBody)
-    if (url.pathname === '/api/health') return send(res, 200, JSON.stringify({ ...health, version, tiles: tileCount() }), 'application/json')
-    if (url.pathname.startsWith('/api/train/')) {
-      const d = detail(decodeURIComponent(url.pathname.slice('/api/train/'.length)))
-      return d ? send(res, 200, JSON.stringify(d), 'application/json') : send(res, 404, '{}', 'application/json')
-    }
-    if (url.pathname === '/api/trip') {
-      const id = url.searchParams.get('id')
-      if (!id) return send(res, 400, '{}', 'application/json')
-      return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'max-age=30' })
-    }
-    if (url.pathname.startsWith('/api/')) return send(res, 404, '{}', 'application/json')
-    return serveStatic(res, url.pathname)
-  } catch (e) {
-    send(res, 502, JSON.stringify({ error: (e as Error).message }), 'application/json')
+    url = new URL(req.url ?? '/', 'http://localhost')
+  } catch {
+    throw new BadRequest('bad url') // e.g. "//"
   }
+  if (url.pathname === '/api/meta') return sendGzipJson(req, res, metaBody)
+  if (url.pathname === '/api/live') return sendGzipJson(req, res, liveBody)
+  if (url.pathname === '/api/health') return send(res, 200, JSON.stringify({ ...health, version, tiles: tileCount() }), 'application/json')
+  if (url.pathname.startsWith('/api/train/')) {
+    const d = detail(decode(url.pathname.slice('/api/train/'.length)))
+    return d ? send(res, 200, JSON.stringify(d), 'application/json') : send(res, 404, '{}', 'application/json')
+  }
+  if (url.pathname === '/api/trip') {
+    // Only trains this server has seen: the endpoint is not a relay to Transitous.
+    const id = url.searchParams.get('id')
+    if (!id || id.length > 200) return send(res, 400, '{}', 'application/json')
+    if (!seen.has(id)) return send(res, 404, '{}', 'application/json')
+    return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'max-age=30' })
+  }
+  if (url.pathname.startsWith('/api/')) return send(res, 404, '{}', 'application/json')
+  return serveStatic(res, url.pathname)
+}
+
+const server = createServer((req, res) => {
+  handle(req, res).catch((e: unknown) => {
+    if (res.headersSent) return void res.destroy()
+    if (e instanceof BadRequest) return send(res, 400, '{}', 'application/json')
+    if (e instanceof Busy) return send(res, 429, '{}', 'application/json', { 'Retry-After': '5' })
+    log('request failed:', req.url, (e as Error).message)
+    send(res, 502, '{}', 'application/json')
+  })
 })
+
+// Last line of defence: a stray rejection is logged instead of taking the collector down.
+process.on('unhandledRejection', (e) => log('unhandled rejection:', e))
 
 await db.connect()
 server.listen(PORT, () => log(`listening on :${PORT}, web app from ${DIST}`))

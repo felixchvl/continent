@@ -81,12 +81,35 @@ export async function collect(log: (l: FetchLog) => void): Promise<ApiSeg[]> {
 export const tileCount = () => leaves.length
 
 const tripCache = new Map<string, { at: number; body: string }>()
+const inFlight = new Map<string, Promise<string>>()
 
-/** Trip details (stops, times, geometry), cached for a minute. */
-export async function trip(id: string): Promise<string> {
+/** Thrown when the upstream budget is spent; the API answers 429. */
+export class Busy extends Error {}
+
+// Whatever visitors do, Transitous gets at most one trip request a second (bursts of 20).
+const BURST = 20
+let tokens = BURST
+let refilled = Date.now()
+
+/** Trip details (stops, times, geometry), cached for a minute, one upstream request per trip at a time. */
+export function trip(id: string): Promise<string> {
   const hit = tripCache.get(id)
-  if (hit && Date.now() - hit.at < 60_000) return hit.body
-  const res = await fetch(`https://api.transitous.org/api/v5/trip?tripId=${encodeURIComponent(id)}`, { headers: { 'User-Agent': UA } })
+  if (hit && Date.now() - hit.at < 60_000) return Promise.resolve(hit.body)
+  const pending = inFlight.get(id)
+  if (pending) return pending
+  const now = Date.now()
+  tokens = Math.min(BURST, tokens + (now - refilled) / 1000)
+  refilled = now
+  if (tokens < 1) return Promise.reject(new Busy('busy'))
+  tokens--
+  const p = fetchTrip(id).finally(() => inFlight.delete(id))
+  inFlight.set(id, p)
+  return p
+}
+
+async function fetchTrip(id: string): Promise<string> {
+  const url = `https://api.transitous.org/api/v5/trip?tripId=${encodeURIComponent(id)}`
+  const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10_000) })
   if (!res.ok) throw new Error(`Transitous ${res.status}`)
   const body = await res.text()
   tripCache.set(id, { at: Date.now(), body })
