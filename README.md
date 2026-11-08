@@ -6,7 +6,11 @@ A live map of Europe's trains: Flighty and Flightradar, for rail. Web first, the
 
 - Every train in Europe, long distance and regional, as dots in their line's colour.
 - Every railway in Europe from OpenStreetMap, lines in their colour, then metros, trams, funiculars and
-  stations with their network's logo when zoomed in; live metros and trams from zoom 12.
+  stations, each the same white dot with its manager's logo when zoomed in (SNCF Gares & Connexions,
+  DB InfraGO...); live metros and trams from zoom 12.
+- Station sheet, from a click on a station (`?gare=id`): the image of its Wikipedia article with its credit,
+  the link to the article, its manager, its city, whether it is the city's main station and its UIC code
+  (Trainline's open data).
 - A library of the actors of European rail (operators, networks, transport authorities, infrastructure
   managers, regions) with their logos, built every month on the server, shown as a page of logos
   (`?vue=bibliotheque`); the logos of a train's line and network (RER + B, S-Bahn + S1) in its tooltip
@@ -49,6 +53,9 @@ npm run dev
   a Protomaps archive and cut down to the water, borders and roads the map draws, `src/basemap.ts`),
   the library of actors (`/api/actors`) and
   their logos (`/logos/Q….svg`, with a sandboxing CSP since the SVGs come from Wikimedia Commons);
+- `/api/gare/:id` answers a station's sheet (`silver.station_info`), and `/api/gare/:id/photo` relays the
+  image of its Wikipedia article from Wikimedia and keeps it in `/var/lib/continent/photos` (owned by the
+  `continent` user), so that browsers only talk to this server;
 - `/api/train/:id` says which OpenStreetMap line the train runs on (same reference within about 2 km,
   `silver.line_shape`), with the logos of the line and its network;
 - segments whose feed gives no shape (straight lines between stations: the French multimodal base, part
@@ -71,10 +78,16 @@ npm run dev
    parents, described by Wikidata (name, kinds, country, territory, parents, colour, website) with their
    logo downloaded from Commons into `/var/lib/continent/logos`; `silver.actor_name`, every operator or
    network name written in OpenStreetMap (`actors.ts`).
-5. **tiles**: tracks merged into long lines first (OSM's short ways otherwise simplify into dashes), then
+5. **stations**: `silver.station_info`, one row per station: Trainline's open list of stations
+   (`bronze.trainline_station`) linked by UIC code, else by name nearby (UIC code, city, main station);
+   the station's manager from the library (by Wikidata id, else by name), with its parent company's logo
+   when it has none; its Wikipedia article (French, else English, else the first one) with the page's
+   image and its credit from Commons, or the article of a station of the same name within 500 m
+   (`stations.ts`).
+6. **tiles**: tracks merged into long lines first (OSM's short ways otherwise simplify into dashes), then
    `rail` (z4-13: high-speed and main lines from zoom 4, branch lines from 6) and `urbain` (z9-14: metros,
    trams, funiculars, stations with their logo), unsimplified at their maximum zoom, swapped in atomically.
-6. **basemap**: Europe (z0-12, 6.8 GB) cut out of the latest [Protomaps](https://protomaps.com) build of
+7. **basemap**: Europe (z0-12, 6.8 GB) cut out of the latest [Protomaps](https://protomaps.com) build of
    OpenStreetMap with `pmtiles extract` into `/var/lib/continent/basemap/europe.pmtiles`; needs the
    [pmtiles](https://github.com/protomaps/go-pmtiles) command, skipped without it.
 
@@ -107,7 +120,8 @@ hairlines, outlined buttons, data written as sentences, and colour reserved for 
 takes its line's official colour (GTFS `route_color` via Transitous; near-black, near-white in dark,
 when the line has none), and so do the tracks (OpenStreetMap `colour`); operators and networks are shown
 by their logos (hand-picked in `web/public/logos`, else the library's, linked by Wikidata id in
-`shared/operators.ts`). Only a delay is shown in red. The train sheet is a vertical timeline in the line's colour.
+`shared/operators.ts`; the library also takes a hand-picked logo when Wikidata has none, such as Île-de-France
+Mobilités', from the header of its open data portal). Only a delay is shown in red. The train sheet is a vertical timeline in the line's colour.
 
 The typeface is Halyard Display (Darden Studio, via Adobe Fonts). It cannot be committed: in
 development the locally installed font is used (Chrome; Safari and Brave hide local fonts), and a
@@ -122,6 +136,8 @@ deployed build loads it from an Adobe Fonts web project set in `VITE_ADOBE_FONTS
 | OpenStreetMap via [Protomaps](https://protomaps.com) builds | base map (sea, rivers, borders, roads) | ODbL |
 | OpenStreetMap via [Geofabrik](https://download.geofabrik.de) extracts | rail network, lines, stations (the data OpenRailwayMap draws) | ODbL |
 | [Wikidata](https://www.wikidata.org), [Wikimedia Commons](https://commons.wikimedia.org) | library of actors, logos | CC0; each logo its own licence |
+| [Trainline stations](https://github.com/trainline-eu/stations) | UIC codes, cities, main stations | ODbL |
+| Wikipedia, Wikimedia Commons | station articles and their images | each image its own licence, credited on the sheet |
 
 The tiles, the library and the logos are built on the server (see the monthly pipeline above) and are not in git.
 
