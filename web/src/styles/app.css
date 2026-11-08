@@ -230,3 +230,12 @@ ol, ul { list-style: none; }
   padding: 6px 10px; background: var(--fond); border: 1px solid var(--trait); border-radius: var(--rayon);
   font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
 }
+
+/* ---- Station sheet ---- */
+/* The article's image runs the full width of the sheet, its credit underneath. */
+.gare-photo { margin: 0 calc(-1 * var(--marge)); display: flex; flex-direction: column; gap: 6px; }
+.gare-photo img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; background: var(--filet); }
+.gare-photo figcaption { padding: 0 var(--marge); }
+.gare-photo figcaption .lien { color: inherit; }
+.gare-details { display: flex; flex-direction: column; gap: 4px; margin-top: -10px; }
+.gare-wiki { align-self: flex-start; }

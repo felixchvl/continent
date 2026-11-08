@@ -17,6 +17,7 @@ import { hexToRgb } from '../shared/operators.ts'
 import type { LiveStore, Shown, TripDetails, TripStop } from '../data/live'
 import { URBAN_MIN_ZOOM, UrbanStore, type UrbanVehicle } from '../data/urbain'
 import type { LonLat } from '../shared/geo.ts'
+import type { StationDetail } from '../shared/protocol.ts'
 
 // MapLibre decodes tiles in a worker it looks for next to maplibre-gl.mjs, which Vite bundles away:
 // the worker is shipped as a file of its own instead.
@@ -42,10 +43,13 @@ type Props = {
   filters: Filters
   selectedId: string | null
   trip: TripDetails | null
+  /** The station whose sheet is open, ringed on the map. */
+  station: StationDetail | null
   follow: boolean
   padding: Padding
   onHover(h: Hover | null): void
   onSelect(id: string | null): void
+  onSelectStation(id: string | null): void
   onReady(api: MapApi): void
 }
 
@@ -169,18 +173,31 @@ export function MapView(props: Props) {
       return { train: s.trains[s.idx[r]], pos: s.pos(r, Date.now()) }
     }
 
+    // The station under the pointer: its dot or its logo on the map, or its name (a deck.gl layer).
+    const stationAt = (info: PickingInfo): string | null => {
+      if (info.layer?.id === 'gares-noms' && info.object) return (info.object as StationLabel).id
+      if (!propsRef.current.network || info.x === undefined) return null
+      const box: [[number, number], [number, number]] = [[info.x - 5, info.y - 5], [info.x + 5, info.y + 5]]
+      const f = map.queryRenderedFeatures(box, { layers: ['gares', 'gares-logos'] }).find((x) => x.id !== undefined)
+      return f ? String(f.id) : null
+    }
     const overlay = new MapboxOverlay({
       interleaved: false, // deck.gl on its own canvas above the map: city names are deck.gl layers too
       layers: [],
       pickingRadius: 6,
       onHover: (info: PickingInfo) => {
         const hit = info.layer?.id === 'trains' && info.index >= 0
-        map.getCanvas().style.cursor = hit ? 'pointer' : ''
+        map.getCanvas().style.cursor = hit || stationAt(info) ? 'pointer' : ''
         propsRef.current.onHover(hit ? { shown: shownAt(info.index), x: info.x, y: info.y } : null)
       },
       onClick: (info: PickingInfo) => {
-        if (info.layer?.id === 'trains' && info.index >= 0) propsRef.current.onSelect(shownAt(info.index).train.id)
-        else if (info.layer?.id !== 'selection-train') propsRef.current.onSelect(null)
+        const p = propsRef.current
+        if (info.layer?.id === 'trains' && info.index >= 0) return p.onSelect(shownAt(info.index).train.id)
+        if (info.layer?.id === 'selection-train') return
+        const station = stationAt(info)
+        if (station) return p.onSelectStation(station)
+        p.onSelect(null)
+        p.onSelectStation(null)
       },
     })
     map.addControl(overlay as unknown as IControl)
@@ -247,7 +264,7 @@ export function MapView(props: Props) {
 
     // Station names (from the station tiles), from zoom 10: big stations first, then halts, then metro
     // and tram stops; placed when the map stops moving, never over a city name or another station.
-    type StationLabel = { name: string; lon: number; lat: number; kind: string }
+    type StationLabel = { id: string; name: string; lon: number; lat: number; kind: string; main: boolean }
     const STATION_ZOOM: Record<string, number> = { station: 10, halt: 11.5, metro: 13, light_rail: 13, tram: 14, funicular: 13 }
     const STATION_RANK: Record<string, number> = { station: 0, halt: 1, metro: 2, light_rail: 2, funicular: 3, tram: 4 }
     let stationNames: StationLabel[] = []
@@ -266,12 +283,14 @@ export function MapView(props: Props) {
         if (!name || zoom < (STATION_ZOOM[kind] ?? 14) || f.geometry.type !== 'Point') continue
         const [lon, lat] = f.geometry.coordinates as [number, number]
         if (bounds && !bounds.contains([lon, lat])) continue
-        const id = `${name}|${lon.toFixed(2)}|${lat.toFixed(2)}`
-        if (seen.has(id)) continue
-        seen.add(id)
-        candidates.push({ name, lon, lat, kind })
+        const key = `${name}|${lon.toFixed(2)}|${lat.toFixed(2)}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        candidates.push({ id: String(f.id), name, lon, lat, kind, main: f.properties?.m === 1 })
       }
-      candidates.sort((a, b) => (STATION_RANK[a.kind] ?? 5) - (STATION_RANK[b.kind] ?? 5))
+      // Main stations of their city first (Trainline's open data), then stations, halts, metro and tram stops.
+      const rank = (st: StationLabel) => (st.main ? -1 : STATION_RANK[st.kind] ?? 5)
+      candidates.sort((a, b) => rank(a) - rank(b))
       const z = Math.floor(zoom * 4) / 4
       const boxes: Box[] = staticLayers.current.placedCities.map((c) => {
         const [x, y] = world(c[0], c[1], z)
@@ -423,13 +442,22 @@ export function MapView(props: Props) {
         )
         if (p.follow) map.jumpTo({ center: [selected.pos.lon, selected.pos.lat] })
       }
+      if (p.station) {
+        const st = p.station
+        layers.push(
+          new ScatterplotLayer<StationDetail>({
+            id: 'selection-gare', data: [st], getPosition: (d) => [d.lon, d.lat], radiusUnits: 'pixels', getRadius: 11,
+            stroked: true, filled: false, getLineColor: pal.texte, lineWidthUnits: 'pixels', getLineWidth: 1.5,
+          }),
+        )
+      }
       if (stopNames) layers.push(stopNames) // names above the trains, like the city names
       const withTrip = p.trip && selected
       layers.push(...cityLayers(zoom, pal, withTrip ? stopCache.boxes : [], withTrip ? stopCache.key : ''))
       if (stationNames.length && !withTrip) {
         layers.push(
           new TextLayer<StationLabel>({
-            id: 'gares-noms', data: stationNames, getPosition: (st) => [st.lon, st.lat], getText: (st) => st.name,
+            id: 'gares-noms', data: stationNames, pickable: true, getPosition: (st) => [st.lon, st.lat], getText: (st) => st.name,
             getSize: 11.5, getColor: pal.texte, fontFamily: FONT, fontWeight: 350, getTextAnchor: 'start', getAlignmentBaseline: 'center',
             getPixelOffset: [7, 0], fontSettings: { sdf: true, buffer: 6 }, outlineWidth: 4, outlineColor: pal.halo, characterSet: 'auto',
           }),

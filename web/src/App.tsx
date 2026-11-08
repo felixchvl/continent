@@ -8,6 +8,8 @@ import { Bibliotheque } from './ui/Bibliotheque'
 import { Perf } from './ui/Perf'
 import { Panel, type Stats } from './ui/Panel'
 import { TrainSheet } from './ui/TrainSheet'
+import { StationSheet } from './ui/StationSheet'
+import type { StationDetail } from './shared/protocol.ts'
 import { MapControls, Tooltip } from './ui/Overlays'
 
 const mobileQuery = window.matchMedia('(max-width: 760px)')
@@ -32,7 +34,15 @@ export default function App() {
   const [filters, setFilters] = useState<Filters>({ gv: true, cl: true, reg: true, gps: true, estimee: true, op: null })
   const [cities, setCities] = useState<City[]>([])
   const [showNetwork, setShowNetwork] = useState(true)
-  const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(location.search).get('train'))
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const q = new URLSearchParams(location.search)
+    return q.get('gare') ? null : q.get('train')
+  })
+  // The station whose sheet is open (?gare=id); a train and a station are never open together.
+  const [stationId, setStationId] = useState<string | null>(() => new URLSearchParams(location.search).get('gare'))
+  const [station, setStation] = useState<StationDetail | null>(null)
+  const [stationError, setStationError] = useState(false)
+  const stationFromUrl = useRef(stationId !== null)
   const [library, setLibrary] = useState(() => new URLSearchParams(location.search).get('vue') === 'bibliotheque')
   const perf = new URLSearchParams(location.search).has('perf') // frame-time readout, see ui/Perf.tsx
   const [trip, setTrip] = useState<TripDetails | null>(null)
@@ -45,6 +55,7 @@ export default function App() {
   const followed = useFollowed()
   const api = useRef<MapApi | null>(null)
   const pendingFit = useRef<TripDetails['line']['points'] | null>(null)
+  const pendingFly = useRef<StationDetail | null>(null)
 
   useEffect(() => {
     const off = store.subscribe(() => setVersion((v) => v + 1))
@@ -95,8 +106,39 @@ export default function App() {
     }
   }, [selectedId])
 
+  // Selected station: URL and sheet; opened from the address, the map flies to it.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSelectedId(null)
+    const url = new URL(location.href)
+    if (stationId) url.searchParams.set('gare', stationId)
+    else url.searchParams.delete('gare')
+    history.replaceState(null, '', url)
+    setStation(null)
+    setStationError(false)
+    if (!stationId) return
+    let cancelled = false
+    fetch(`/api/gare/${stationId}`)
+      .then((r) => (r.ok ? (r.json() as Promise<StationDetail>) : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (cancelled) return
+        setStation(d)
+        if (stationFromUrl.current) {
+          if (api.current) api.current.flyTo(d.lon, d.lat, 14)
+          else pendingFly.current = d // the map is not ready yet
+        }
+        stationFromUrl.current = false
+      })
+      .catch(() => !cancelled && setStationError(true))
+    return () => {
+      cancelled = true
+    }
+  }, [stationId])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setSelectedId(null)
+      setStationId(null)
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -134,9 +176,19 @@ export default function App() {
   const byId = useMemo(() => new Map(live.map((s) => [s.train.id, s])), [live])
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null
 
+  // A train and a station are never open together.
+  const selectTrain = (id: string | null) => {
+    setSelectedId(id)
+    if (id) setStationId(null)
+  }
+  const selectStation = (id: string | null) => {
+    setStationId(id)
+    if (id) setSelectedId(null)
+  }
+
   const pick = (id: string) => {
     setQuery('')
-    setSelectedId(id)
+    selectTrain(id)
     const s = byId.get(id)
     if (s && id.startsWith('renfe:')) api.current?.flyTo(s.pos.lon, s.pos.lat, 8)
   }
@@ -159,7 +211,7 @@ export default function App() {
     : { top: 32, right: 80, left: 432, bottom: 32 }
 
   return (
-    <div className={`app${mobile ? ' mobile' : ''}${selectedId ? ' avec-fiche' : ''}`}>
+    <div className={`app${mobile ? ' mobile' : ''}${selectedId || stationId ? ' avec-fiche' : ''}`}>
       <MapView
         store={store}
         network={showNetwork}
@@ -171,11 +223,15 @@ export default function App() {
         follow={follow}
         padding={padding}
         onHover={mobile ? () => {} : setHover}
-        onSelect={setSelectedId}
+        onSelect={selectTrain}
+        station={station}
+        onSelectStation={selectStation}
         onReady={(a) => {
           api.current = a
           if (pendingFit.current) a.fit(pendingFit.current)
           pendingFit.current = null
+          if (pendingFly.current) a.flyTo(pendingFly.current.lon, pendingFly.current.lat, 14)
+          pendingFly.current = null
         }}
       />
 
@@ -194,6 +250,8 @@ export default function App() {
           onToggleFollowed={toggleFollowed}
           onToggleCamera={() => setFollow((f) => !f)}
         />
+      ) : stationId ? (
+        <StationSheet id={stationId} station={station} error={stationError} onBack={() => setStationId(null)} />
       ) : (
         <div className={`panneau-conteneur${expanded ? ' deplie' : ''}`}>
           {mobile && (
