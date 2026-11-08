@@ -6,7 +6,7 @@
 #   load      into PostgreSQL, schema osm (bronze), with osm2pgsql and rail.lua
 #   silver    silver.line, silver.track, silver.station (silver.sql)
 #   actors    the library of operators, networks and authorities, with their logos (actors.ts)
-#   tiles     vector tiles for the map: rail (z4-11, every passenger line) and urbain (z9-13:
+#   tiles     vector tiles for the map: rail (z4-13, every passenger line) and urbain (z9-14:
 #             metros, trams, funiculars and the stations), swapped in atomically
 #
 # STAGES picks the stages (default: all). About 30 GB pass through the download, a few hundred MB stay.
@@ -74,16 +74,26 @@ fi
 if has tiles; then
   log "tiles"
   q() { psql -X -At -v ON_ERROR_STOP=1 -d "$DB" -c "$1"; }
-  q "select json_build_object('type', 'Feature',
+  # OpenStreetMap cuts a line into many short ways (bridges, switches, tag changes). Merged into long
+  # lines first (per kind and colour, within 2-degree cells), they simplify into smooth curves instead
+  # of a dotted trail of two-point fragments.
+  merged() {
+    echo "with m as (
+      select c, colour, $2 (st_dump(st_linemerge(st_collect(geom)))).geom as geom from silver.track where $1
+      group by c, colour, $2 floor(st_x(st_startpoint(geom)) / 2), floor(st_y(st_startpoint(geom)) / 2))"
+  }
+  q "$(merged "c in ('gv', 'main', 'branch')" '')
+     select json_build_object('type', 'Feature',
        'tippecanoe', json_build_object('minzoom', case when c in ('gv', 'main') then 4 else 6 end),
        'properties', json_strip_nulls(json_build_object('c', c, 'col', colour)),
-       'geometry', st_asgeojson(geom, 5)::json)
-     from silver.track where c in ('gv', 'main', 'branch')" > rail.geojsonseq
-  q "select json_build_object('type', 'Feature',
+       'geometry', st_asgeojson(geom, 6)::json)
+     from m" > rail.geojsonseq
+  q "$(merged "c not in ('gv', 'main', 'branch')" 'refs,')
+     select json_build_object('type', 'Feature',
        'tippecanoe', json_build_object('layer', 'urbain', 'minzoom', case c when 'tram' then 10 when 'metro' then 9 when 'light_rail' then 9 else 11 end),
        'properties', json_strip_nulls(json_build_object('c', c, 'col', colour, 'ref', refs)),
        'geometry', st_asgeojson(geom, 6)::json)
-     from silver.track where c not in ('gv', 'main', 'branch')" > urbain.geojsonseq
+     from m" > urbain.geojsonseq
   # A station carries the logo of its network, else of its operator, when the library has one.
   q "select json_build_object('type', 'Feature',
        'tippecanoe', json_build_object('layer', 'gares', 'minzoom', case s.kind when 'station' then 9 when 'halt' then 11 when 'tram' then 13 else 12 end),
@@ -100,9 +110,11 @@ if has tiles; then
     mv "$TILES/$set_name.new" "$TILES/$set_name"
     rm -rf "$TILES/$set_name.old"
   }
-  build rail -l rail -Z4 -z11 --coalesce --reorder --simplification=2 --drop-densest-as-needed \
-    --extend-zooms-if-still-dropping -P rail.geojsonseq
-  build urbain -Z9 -z13 --coalesce --reorder --simplification=2 --drop-densest-as-needed -P urbain.geojsonseq gares.geojsonseq
+  # Simplified below the maximum zoom only: from there on the map shows OpenStreetMap's exact curves.
+  build rail -l rail -Z4 -z13 --coalesce --reorder --simplification=2 --simplify-only-low-zooms --drop-densest-as-needed \
+    -P rail.geojsonseq
+  build urbain -Z9 -z14 --coalesce --reorder --simplification=2 --simplify-only-low-zooms --drop-densest-as-needed \
+    -P urbain.geojsonseq gares.geojsonseq
   du -sh "$TILES"/rail "$TILES"/urbain
 fi
 
