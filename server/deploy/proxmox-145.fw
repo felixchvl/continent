@@ -1,0 +1,21 @@
+[OPTIONS]
+
+enable: 1
+policy_in: DROP
+policy_out: ACCEPT
+
+[RULES]
+
+IN ACCEPT -source 192.168.1.0/24 -p tcp -dport 22 -log nolog # SSH from the home network (deploy.sh)
+IN ACCEPT -source 192.168.1.0/24 -p tcp -dport 8080 -log nolog # web app from the home network
+IN Ping(ACCEPT) -source 192.168.1.0/24 -log nolog
+OUT ACCEPT -dest 192.168.1.1 -p udp -dport 53 -log nolog # DNS on the box
+OUT ACCEPT -dest 192.168.1.1 -p tcp -dport 53 -log nolog # DNS on the box
+OUT REJECT -dest 192.168.1.0/24 -log nolog # nothing else on the home network
+OUT REJECT -dest 10.0.0.0/8 -log nolog
+OUT REJECT -dest 172.16.0.0/12 -log nolog
+OUT REJECT -dest 100.64.0.0/10 -log nolog # tailnet
+OUT REJECT -dest 169.254.0.0/16 -log nolog
+OUT REJECT -dest 224.0.0.0/4 -log nolog
+OUT REJECT -dest fc00::/7 -log nolog # IPv6 ULA of the home network
+OUT REJECT -dest fe80::/10 -log nolog # IPv6 link-local

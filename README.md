@@ -38,6 +38,12 @@ npm run dev
 `./deploy.sh` pulls main on the server, builds the web app and restarts the `continent` service.
 In development, Vite proxies `/api` to the server (`CONTINENT_API` to point elsewhere).
 
+The container is cut off from the home network by the Proxmox firewall
+([`server/deploy/proxmox-145.fw`](server/deploy/proxmox-145.fw), installed as `/etc/pve/firewall/145.fw`):
+in, only SSH, the web app and ping from 192.168.1.0/24; out, the internet and DNS on the box, nothing
+else on the LAN (IPv4 private ranges, IPv6 ULA and link-local rejected). `/api/trip` only forwards trains
+the server has seen, within one Transitous request a second.
+
 ## Stack
 
 - React + Vite + TypeScript.
