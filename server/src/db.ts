@@ -158,13 +158,17 @@ export async function actors(): Promise<unknown[]> {
   }
 }
 
-/** The rail tracks (OpenStreetMap, silver.track) within `width` degrees of the straight line a-b. */
+/**
+ * Every rail track (OpenStreetMap, osm.way) within `width` degrees of the straight line a-b, service
+ * tracks included: the platform tracks of big stations are often tagged as such, and without them
+ * the network breaks apart at the stations.
+ */
 export async function tracksNear(a: [number, number], b: [number, number], width: number): Promise<[number, number][][]> {
   if (!pool) return []
   const { rows } = await pool.query<{ g: string }>(`
     with l as (select st_setsrid(st_makeline(st_point($1, $2), st_point($3, $4)), 4326) as g)
-    select st_asgeojson(t.geom, 6) as g from silver.track t, l
-    where t.c in ('gv', 'main', 'branch') and t.geom && st_expand(l.g, $5) and st_dwithin(t.geom, l.g, $5)`,
+    select st_asgeojson(t.geom, 6) as g from osm.way t, l
+    where t.railway in ('rail', 'narrow_gauge', 'light_rail') and t.geom && st_expand(l.g, $5) and st_dwithin(t.geom, l.g, $5)`,
     [a[0], a[1], b[0], b[1], width])
   return rows.map((r) => (JSON.parse(r.g) as { coordinates: [number, number][] }).coordinates)
 }
