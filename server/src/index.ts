@@ -173,6 +173,9 @@ async function renfeLoop() {
     ])
     const vp = JSON.parse(vpText) as RenfeVP
     const tu = JSON.parse(tuText) as RenfeTU
+    // At night, with no train out, the feeds have a header and no entity list.
+    vp.entity ??= []
+    tu.entity ??= []
     lastRenfe = { vp, tu }
     const before = trains.size
     applyRenfe(trains, vp, tu, renfe)
