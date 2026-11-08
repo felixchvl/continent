@@ -10,7 +10,7 @@ export type Operator = { id: string; name: string; color: string; qid?: string; 
 const LIST: [prefix: string, id: string, name: string, color: string, qid: string, logo?: string][] = [
   ['fr-horaires-sncf', 'sncf', 'SNCF', '#930C38', 'Q13646', 'sncf.svg'],
   ['fr-eurostar', 'eurostar', 'Eurostar', '#116BFE', 'Q5413836', 'eurostar.svg'],
-  ['fr-reseau-urbain-et-interurbain-dile-de-france', 'idfm', 'Île-de-France Mobilités', '#3C1A6E', 'Q1747944'],
+  ['fr-reseau-urbain-et-interurbain-dile-de-france', 'idfm', 'Île-de-France Mobilités', '#3C1A6E', 'Q1747944', 'idfm.svg'],
   ['es-RENFE', 'renfe', 'Renfe', '#8A1C76', 'Q2476154', 'renfe.svg'],
   ['es-Ouigo', 'ouigo', 'Ouigo', '#0096D6', 'Q97172588', 'ouigo.svg'],
   ['es-iryo', 'iryo', 'Iryo', '#D7282F', 'Q104884461', 'iryo.png'],
