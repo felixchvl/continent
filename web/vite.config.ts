@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: process.env.CONTINENT_API ?? 'http://192.168.1.65:8080', changeOrigin: true },
       '/tiles': { target: process.env.CONTINENT_API ?? 'http://192.168.1.65:8080', changeOrigin: true },
+      '^/logos/Q': { target: process.env.CONTINENT_API ?? 'http://192.168.1.65:8080', changeOrigin: true },
     },
   },
 })

@@ -4,6 +4,7 @@ import { LiveStore, fetchTrip, type Shown, type TripDetails } from './data/live'
 import { RENFE, operatorOf, type Operator } from './shared/operators.ts'
 import { useTheme } from './theme'
 import { useFollowed } from './useFollowed'
+import { Bibliotheque } from './ui/Bibliotheque'
 import { Panel, type Stats } from './ui/Panel'
 import { TrainSheet } from './ui/TrainSheet'
 import { MapControls, Tooltip } from './ui/Overlays'
@@ -31,6 +32,7 @@ export default function App() {
   const [cities, setCities] = useState<City[]>([])
   const [showNetwork, setShowNetwork] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(location.search).get('train'))
+  const [library, setLibrary] = useState(() => new URLSearchParams(location.search).get('vue') === 'bibliotheque')
   const [trip, setTrip] = useState<TripDetails | null>(null)
   const [tripLoading, setTripLoading] = useState(false)
   const [tripError, setTripError] = useState<string | null>(null)
@@ -56,6 +58,14 @@ export default function App() {
   useEffect(() => {
     fetch('/data/villes.json').then((r) => r.json()).then(setCities).catch(() => setCities([]))
   }, [])
+
+  // The library of actors has its own address: ?vue=bibliotheque.
+  useEffect(() => {
+    const url = new URL(location.href)
+    if (library) url.searchParams.set('vue', 'bibliotheque')
+    else url.searchParams.delete('vue')
+    history.replaceState(null, '', url)
+  }, [library])
 
   // Selected train: URL, trip details, framing.
   useEffect(() => {
@@ -203,6 +213,7 @@ export default function App() {
             results={results}
             onPick={pick}
             followed={followed.list.map((f) => ({ f, live: byId.get(f.id) ?? null }))}
+            onLibrary={() => setLibrary(true)}
           />
         </div>
       )}
@@ -218,6 +229,7 @@ export default function App() {
       />
 
       {hover && !mobile && hover.shown.train.id !== selectedId && <Tooltip hover={hover} />}
+      {library && <Bibliotheque onClose={() => setLibrary(false)} />}
     </div>
   )
 }

@@ -37,8 +37,8 @@ export function buildStyle(): StyleSpecification {
     projection: { name: 'mercator' },
     sources: {
       streets: { type: 'vector', url: 'mapbox://mapbox.mapbox-streets-v8' },
-      rail: { type: 'vector', tiles: tiles('rail'), minzoom: 4, maxzoom: 11, attribution: '© OpenStreetMap' },
-      urbain: { type: 'vector', tiles: tiles('urbain'), minzoom: 9, maxzoom: 13 },
+      rail: { type: 'vector', tiles: tiles('rail'), minzoom: 4, maxzoom: 13, attribution: '© OpenStreetMap' },
+      urbain: { type: 'vector', tiles: tiles('urbain'), minzoom: 9, maxzoom: 14 },
     },
     layers: [
       { id: 'terre', type: 'background', paint: { 'background-color': c('carte-terre') } },
@@ -72,9 +72,12 @@ export function buildStyle(): StyleSpecification {
         // Stations: white dots ringed in black, like the stops on the train sheet.
         id: 'gares', type: 'circle', source: 'urbain', 'source-layer': 'gares', minzoom: 9,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, ['match', ['get', 'k'], ['station'], 1.6, 1], 14, ['match', ['get', 'k'], ['station'], 4.5, 3]] as unknown as number,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'],
+            9, ['match', ['get', 'k'], ['station'], 2.4, 1.6],
+            12, ['match', ['get', 'k'], ['station'], 4, ['halt'], 3, 2.4],
+            16, ['match', ['get', 'k'], ['station'], 6.5, ['halt'], 5, 4]] as unknown as number,
           'circle-color': c('fond'), 'circle-stroke-color': c('texte'),
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.2] as unknown as number,
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.6] as unknown as number,
         },
       },
       {

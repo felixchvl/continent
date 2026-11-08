@@ -73,6 +73,12 @@ const rgb = (hex: string) => {
   if (!c) rgbCache.set(hex, (c = hexToRgb(hex)))
   return c
 }
+/** Web Mercator pixels at this zoom: label boxes computed at different moments stay comparable. */
+const world = (lon: number, lat: number, zoom: number): [number, number] => {
+  const k = 512 * 2 ** zoom
+  const r = (lat * Math.PI) / 180
+  return [((lon + 180) / 360) * k, ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * k]
+}
 const overlaps = (b: Box, boxes: Box[]) => boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])
 
 function radiusScale(zoom: number) {
@@ -92,7 +98,7 @@ export function MapView(props: Props) {
   propsRef.current = props
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const paletteRef = useRef<Palette>(readPalette())
-  const staticLayers = useRef<{ key: string; cities: Layer[] }>({ key: '', cities: [] })
+  const staticLayers = useRef<{ key: string; cities: Layer[]; placedCities: City[] }>({ key: '', cities: [], placedCities: [] })
   const userPos = useRef<LonLat | null>(null)
   const routeCache = useRef<{ id: string; t: number; along: number } | null>(null)
 
@@ -107,6 +113,7 @@ export function MapView(props: Props) {
       maxZoom: 16,
       attributionControl: false,
       projection: 'mercator',
+      hash: true, // #zoom/lat/lon: a view can be shared and survives a reload
     })
     mapRef.current = map
     map.on('error', (e) => console.error('Mapbox', e.error?.message ?? e))
@@ -221,6 +228,7 @@ export function MapView(props: Props) {
         boxes.push(b)
         placed.push(c)
       }
+      cache.placedCities = placed
       const base = {
         getPosition: (c: City) => [c[0], c[1]] as [number, number], getText: (c: City) => c[2],
         getColor: pal.texte, fontFamily: FONT, fontSettings: { sdf: true, buffer: 6 }, outlineWidth: 4, outlineColor: pal.halo,
@@ -233,6 +241,52 @@ export function MapView(props: Props) {
       cache.key = key
       return cache.cities
     }
+
+    // Station names (from the station tiles), from zoom 10: big stations first, then halts, then metro
+    // and tram stops; placed when the map stops moving, never over a city name or another station.
+    type StationLabel = { name: string; lon: number; lat: number; kind: string }
+    const STATION_ZOOM: Record<string, number> = { station: 10, halt: 11.5, metro: 13, light_rail: 13, tram: 14, funicular: 13 }
+    const STATION_RANK: Record<string, number> = { station: 0, halt: 1, metro: 2, light_rail: 2, funicular: 3, tram: 4 }
+    let stationNames: StationLabel[] = []
+    const placeStations = () => {
+      const zoom = map.getZoom()
+      if (zoom < 10 || !propsRef.current.network) {
+        stationNames = []
+        return
+      }
+      const bounds = map.getBounds()
+      const seen = new Set<string>()
+      const candidates: StationLabel[] = []
+      for (const f of map.querySourceFeatures('urbain', { sourceLayer: 'gares' })) {
+        const kind = String(f.properties?.k ?? 'station')
+        const name = String(f.properties?.n ?? '')
+        if (!name || zoom < (STATION_ZOOM[kind] ?? 14) || f.geometry.type !== 'Point') continue
+        const [lon, lat] = f.geometry.coordinates as [number, number]
+        if (bounds && !bounds.contains([lon, lat])) continue
+        const id = `${name}|${lon.toFixed(2)}|${lat.toFixed(2)}`
+        if (seen.has(id)) continue
+        seen.add(id)
+        candidates.push({ name, lon, lat, kind })
+      }
+      candidates.sort((a, b) => (STATION_RANK[a.kind] ?? 5) - (STATION_RANK[b.kind] ?? 5))
+      const z = Math.floor(zoom * 4) / 4
+      const boxes: Box[] = staticLayers.current.placedCities.map((c) => {
+        const [x, y] = world(c[0], c[1], z)
+        const w = textWidth(c[2], c[4] ? 500 : 400, c[4] ? 13.5 : 12) + 10
+        return [x - w / 2, y - 12, x + w / 2, y + 12] as Box
+      })
+      const out: StationLabel[] = []
+      for (const st of candidates) {
+        const [x, y] = world(st.lon, st.lat, z)
+        const b: Box = [x - 5, y - 8, x + 12 + textWidth(st.name, 350, 11.5), y + 8]
+        if (overlaps(b, boxes)) continue
+        boxes.push(b)
+        out.push(st)
+        if (out.length >= 250) break
+      }
+      stationNames = out
+    }
+    map.on('idle', placeStations)
 
     const stopCache = { key: '', list: [] as TripStop[], boxes: [] as Box[] }
     const stopLabels = (stops: TripStop[], zoom: number) => {
@@ -369,6 +423,15 @@ export function MapView(props: Props) {
       if (stopNames) layers.push(stopNames) // names above the trains, like the city names
       const withTrip = p.trip && selected
       layers.push(...cityLayers(zoom, pal, withTrip ? stopCache.boxes : [], withTrip ? stopCache.key : ''))
+      if (stationNames.length && !withTrip) {
+        layers.push(
+          new TextLayer<StationLabel>({
+            id: 'gares-noms', data: stationNames, getPosition: (st) => [st.lon, st.lat], getText: (st) => st.name,
+            getSize: 11.5, getColor: pal.texte, fontFamily: FONT, fontWeight: 350, getTextAnchor: 'start', getAlignmentBaseline: 'center',
+            getPixelOffset: [7, 0], fontSettings: { sdf: true, buffer: 6 }, outlineWidth: 4, outlineColor: pal.halo, characterSet: 'auto',
+          }),
+        )
+      }
       if (userPos.current) {
         layers.push(
           new ScatterplotLayer({

@@ -27,6 +27,7 @@ type Props = {
   results: Shown[]
   onPick(id: string): void
   followed: { f: FollowedTrain; live: Shown | null }[]
+  onLibrary(): void
 }
 
 export function Panel(p: Props) {
@@ -113,7 +114,9 @@ export function Panel(p: Props) {
           <section>
             <div className="titre">
               <h2 className="t-info-fort">Compagnies</h2>
-              {f.op && <button type="button" className="t-info lien" onClick={() => p.onFilters({ ...f, op: null })}>Toutes</button>}
+              {f.op
+                ? <button type="button" className="t-info lien" onClick={() => p.onFilters({ ...f, op: null })}>Toutes</button>
+                : <button type="button" className="t-info lien" onClick={p.onLibrary}>Bibliothèque</button>}
             </div>
             <ul className="liste">
               {s.ops.slice(0, 9).map(({ op, n }) => (
@@ -128,6 +131,10 @@ export function Panel(p: Props) {
               ))}
             </ul>
           </section>
+
+          <button type="button" className="bouton large t-corps" onClick={p.onLibrary}>
+            Tous les acteurs et leurs logos
+          </button>
 
           <section>
             <h2 className="t-info-fort">Trains suivis</h2>

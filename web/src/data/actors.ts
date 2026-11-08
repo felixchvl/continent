@@ -9,6 +9,7 @@ export type Actor = {
   lines: number; stations: number; parents: string[]; aliases: string[]
 }
 
+let list: Actor[] = []
 const byQid = new Map<string, Actor>()
 const byName = new Map<string, Actor>()
 let loaded: Promise<void> | null = null
@@ -39,7 +40,8 @@ export function nameKey(s: string): string {
 export function loadActors(): Promise<void> {
   loaded ??= fetch('/api/actors')
     .then((r) => (r.ok ? (r.json() as Promise<Actor[]>) : []))
-    .then((list) => {
+    .then((actors) => {
+      list = actors
       // Most present first: when two actors share a name, the one with more lines and stations wins.
       const add = (n: string, a: Actor) => {
         // German umlauts are also written oe, ae, ue (ÖBB, OEBB).
@@ -59,6 +61,8 @@ export function loadActors(): Promise<void> {
   return loaded
 }
 
+/** Every actor, most present first. */
+export const allActors = () => list
 export const actorByQid = (qid: string | undefined | null) => (qid ? byQid.get(qid) : undefined)
 /** The actor by name; failing the whole name, the name without its last words ('Renfe Cercanias' ->
  * Renfe, 'OEBB Personenverkehr AG Kundenservice' -> ÖBB-Personenverkehr). */
