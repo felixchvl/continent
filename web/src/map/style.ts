@@ -1,39 +1,44 @@
 // Base map built from the design tokens, on Mapbox Streets vector tiles: a quiet ground
 // (land, sea, borders, roads only when zoomed in) so the operators' colours carry the map.
-// The rail network comes from OpenStreetMap (our own tiles, web/scripts/build-rail.sh): every
-// passenger line in Europe, high-speed lines darker, main lines thicker than branch lines.
+// The rail network comes from OpenStreetMap (our own tiles, server/pipeline/osm.sh): every passenger
+// line in Europe in its line's colour or a grey (high-speed darker, main lines thicker than branch
+// lines), then metros, trams and funiculars, and the stations, from zoom 9.
 // City names are drawn by deck.gl in Halyard, like the rest of the interface.
 
-import type { Map as MapboxMap, StyleSpecification } from 'mapbox-gl'
+import type { FilterSpecification, Map as MapboxMap, StyleSpecification } from 'mapbox-gl'
 import { tokenCss } from '../theme'
 
 const notMaritime = ['match', ['to-string', ['get', 'maritime']], 'true', false, true]
 const notDisputed = ['match', ['to-string', ['get', 'disputed']], 'true', false, true]
 const worldview = ['match', ['get', 'worldview'], ['all', 'US'], true, false]
 
-/** The rail network layers, bottom to top; the network button shows or hides them together. */
-export const NETWORK_LAYERS = ['reseau-secondaire', 'reseau-principal', 'reseau-gv'] as const
-
 const width = (z4: number, z8: number, z12: number, z16: number) =>
   ['interpolate', ['exponential', 1.4], ['zoom'], 4, z4, 8, z8, 12, z12, 16, z16]
 
+/** The network, bottom to top. A track takes its line's colour (`col`, from OpenStreetMap) when the
+ * lines on it agree on one, else the grey of its kind. Built by server/pipeline/osm.sh. */
+const NETWORK: { id: string; source: 'rail' | 'urbain'; kinds: string[]; grey: string; width: unknown; minzoom: number }[] = [
+  { id: 'reseau-secondaire', source: 'rail', kinds: ['branch'], grey: 'carte-reseau-secondaire', width: width(0.45, 0.8, 1.3, 2.4), minzoom: 6 },
+  { id: 'reseau-principal', source: 'rail', kinds: ['main'], grey: 'carte-reseau-classique', width: width(0.65, 1.15, 1.8, 3), minzoom: 4 },
+  { id: 'reseau-gv', source: 'rail', kinds: ['gv'], grey: 'carte-reseau-gv', width: width(0.95, 1.5, 2.4, 3.6), minzoom: 4 },
+  { id: 'urbain-tram', source: 'urbain', kinds: ['tram'], grey: 'carte-urbain', width: width(0.3, 0.5, 1.3, 3), minzoom: 10 },
+  { id: 'urbain-metro', source: 'urbain', kinds: ['metro', 'light_rail', 'monorail', 'funicular'], grey: 'carte-urbain', width: width(0.4, 0.7, 1.8, 4), minzoom: 9 },
+]
+/** Everything the network button shows or hides. */
+export const NETWORK_LAYERS = [...NETWORK.map((l) => l.id), 'gares'] as const
+
+const lineColor = (grey: string) => ['coalesce', ['get', 'col'], tokenCss(grey)] as unknown as string
+
 export function buildStyle(): StyleSpecification {
   const c = tokenCss
-  const rail = (id: string, cls: string, color: string, w: unknown, minzoom = 4) => ({
-    id, type: 'line' as const, source: 'rail', 'source-layer': 'rail', minzoom,
-    filter: ['==', ['get', 'c'], cls],
-    layout: { 'line-cap': 'round' as const, 'line-join': 'round' as const },
-    paint: { 'line-color': c(color), 'line-width': w as number },
-  })
+  const tiles = (set: string) => [`${location.origin}/tiles/${set}/{z}/{x}/{y}.pbf`]
   return {
     version: 8,
     projection: { name: 'mercator' },
     sources: {
       streets: { type: 'vector', url: 'mapbox://mapbox.mapbox-streets-v8' },
-      rail: {
-        type: 'vector', tiles: [`${location.origin}/tiles/rail/{z}/{x}/{y}.pbf`], minzoom: 4, maxzoom: 11,
-        attribution: '© OpenStreetMap',
-      },
+      rail: { type: 'vector', tiles: tiles('rail'), minzoom: 4, maxzoom: 11, attribution: '© OpenStreetMap' },
+      urbain: { type: 'vector', tiles: tiles('urbain'), minzoom: 9, maxzoom: 13 },
     },
     layers: [
       { id: 'terre', type: 'background', paint: { 'background-color': c('carte-terre') } },
@@ -57,9 +62,21 @@ export function buildStyle(): StyleSpecification {
         filter: ['all', ['==', ['get', 'admin_level'], 0], notMaritime, notDisputed, worldview],
         paint: { 'line-color': c('carte-frontiere'), 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 10, 1.2] },
       },
-      rail('reseau-secondaire', 'branch', 'carte-reseau-secondaire', width(0.45, 0.8, 1.3, 2.4), 6),
-      rail('reseau-principal', 'main', 'carte-reseau-classique', width(0.65, 1.15, 1.8, 3)),
-      rail('reseau-gv', 'gv', 'carte-reseau-gv', width(0.95, 1.5, 2.4, 3.6)),
+      ...NETWORK.map((l) => ({
+        id: l.id, type: 'line' as const, source: l.source, 'source-layer': l.source, minzoom: l.minzoom,
+        filter: ['in', ['get', 'c'], ['literal', l.kinds]] as FilterSpecification,
+        layout: { 'line-cap': 'round' as const, 'line-join': 'round' as const },
+        paint: { 'line-color': lineColor(l.grey), 'line-width': l.width as number },
+      })),
+      {
+        // Stations: white dots ringed in black, like the stops on the train sheet.
+        id: 'gares', type: 'circle', source: 'urbain', 'source-layer': 'gares', minzoom: 9,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, ['match', ['get', 'k'], ['station'], 1.6, 1], 14, ['match', ['get', 'k'], ['station'], 4.5, 3]] as unknown as number,
+          'circle-color': c('fond'), 'circle-stroke-color': c('texte'),
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.2] as unknown as number,
+        },
+      },
     ],
   }
 }
@@ -72,15 +89,15 @@ export function setNetworkVisible(map: MapboxMap, visible: boolean) {
 /** Recolours the map for the current theme without reloading the style. */
 export function applyTheme(map: MapboxMap) {
   const c = tokenCss
-  const set = (layer: string, prop: string, value: string) => {
+  const set = (layer: string, prop: string, value: unknown) => {
     if (map.getLayer(layer)) map.setPaintProperty(layer, prop as never, value as never)
   }
   set('terre', 'background-color', c('carte-terre'))
   set('mer', 'fill-color', c('carte-mer'))
   set('rivieres', 'line-color', c('carte-mer'))
   set('routes', 'line-color', c('carte-frontiere'))
-  set('reseau-secondaire', 'line-color', c('carte-reseau-secondaire'))
-  set('reseau-principal', 'line-color', c('carte-reseau-classique'))
-  set('reseau-gv', 'line-color', c('carte-reseau-gv'))
+  for (const l of NETWORK) set(l.id, 'line-color', lineColor(l.grey))
+  set('gares', 'circle-color', c('fond'))
+  set('gares', 'circle-stroke-color', c('texte'))
   set('frontieres', 'line-color', c('carte-frontiere'))
 }

@@ -29,6 +29,7 @@
   --carte-reseau-classique: #a8a8a8;
   --carte-reseau-secondaire: #c6c6c4;
   --train-neutre: #3a3a3a;
+  --carte-urbain: #9a9a9a;
   --carte-ville: #000000;
   --carte-halo: #f3f3f1;
 }
@@ -51,6 +52,7 @@
   --carte-reseau-classique: #575757;
   --carte-reseau-secondaire: #3a3a3a;
   --train-neutre: #d4d4d4;
+  --carte-urbain: #6a6a6a;
   --carte-ville: #ffffff;
   --carte-halo: #161616;
 }
