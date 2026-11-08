@@ -11,7 +11,8 @@ A live map of Europe's trains: Flighty and Flightradar, for rail. Web first, the
   managers, regions) with their logos, built every month on the server.
 - Spain: real GPS positions from Renfe. Elsewhere: positions estimated from timetables and real-time delays,
   interpolated along the track (Transitous / MOTIS). Every train says which of the two it is.
-- Train sheet: times, delay, progress, stop timeline, route drawn on the map, camera follow.
+- Train sheet: times, delay, progress, stop timeline, route drawn on the map, camera follow, and the
+  agency running the train with its logo when it is not the operator itself (DB → Trans Regio).
 - Followed trains (stored in the browser), search by train name or number.
 - Light and dark themes (automatic by default), desktop and mobile layouts.
 
@@ -88,7 +89,8 @@ Swiss and minimal, after the 2024 Figma file "Continent" (iOS screens): one type
 hairlines, outlined buttons, data written as sentences, and colour reserved for identity. Each train
 takes its line's official colour (GTFS `route_color` via Transitous; near-black, near-white in dark,
 when the line has none), and so do the tracks (OpenStreetMap `colour`); operators and networks are shown
-by their logos. Only a delay is shown in red. The train sheet is a vertical timeline in the line's colour.
+by their logos (hand-picked in `web/public/logos`, else the library's, linked by Wikidata id in
+`shared/operators.ts`). Only a delay is shown in red. The train sheet is a vertical timeline in the line's colour.
 
 The typeface is Halyard Display (Darden Studio, via Adobe Fonts). It cannot be committed: in
 development the locally installed font is used (Chrome; Safari and Brave hide local fonts), and a
