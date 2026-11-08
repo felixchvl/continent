@@ -178,6 +178,11 @@ async function fetchLogo(qid: string, source: string, previous: { source: string
   return (count('throttled'), null)
 }
 
+// Logos Wikidata does not have, from Commons (free licences): the manager of 3,000 French stations.
+const LOGO_OVERRIDES: Record<string, string> = {
+  Q3098278: 'http://commons.wikimedia.org/wiki/Special:FilePath/200914%20LOGO%20SNCF%20GC%20RGB.png', // SNCF Gares & Connexions, CC BY-SA 4.0
+}
+
 // Logos are fetched for the actors that matter most first: organisations before lines, the most present first.
 const KIND_ORDER: Kind[] = ['exploitant', 'reseau', 'autorite', 'infrastructure', 'marque', 'collectivite', 'autre', 'ligne']
 
@@ -224,7 +229,7 @@ async function main() {
     .filter((a) => a.name) // no label at all: a deleted or merged item
     .map((a) => {
       const kinds = kindsOf(a.types, labels)
-      return { ...a, kind: kinds[0], kinds, logo_file: null as string | null }
+      return { ...a, kind: kinds[0], kinds, logo_source: a.logo_source ?? LOGO_OVERRIDES[a.qid] ?? null, logo_file: null as string | null }
     })
     .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || weight(b.qid) - weight(a.qid))
   for (const a of done) {
