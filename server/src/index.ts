@@ -16,6 +16,8 @@ import * as db from './db.ts'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const DIST = resolve(import.meta.dirname, process.env.DIST ?? '../../web/dist')
+// Vector tiles built by web/scripts/build-rail.sh (gzipped .pbf in z/x/y folders), one folder per set.
+const TILES = process.env.TILES ?? '/var/lib/continent/tiles'
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...a)
 
 // ---- State ----------------------------------------------------------------------------------
@@ -181,6 +183,20 @@ async function serveStatic(res: ServerResponse, path: string) {
   }
 }
 
+const TILE_PATH = /^\/tiles\/([a-z]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.pbf$/
+
+/** A vector tile, already gzipped on disk; a tile with nothing in it answers 204, which maps read as empty. */
+async function serveTile(res: ServerResponse, m: RegExpMatchArray) {
+  const [, set, z, x, y] = m
+  try {
+    const body = await readFile(join(TILES, set, z, x, `${y}.pbf`))
+    send(res, 200, body, 'application/x-protobuf', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=86400' })
+  } catch {
+    res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' })
+    res.end()
+  }
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse) {
   let url: URL
   try {
@@ -203,6 +219,9 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'public, max-age=30' })
   }
   if (url.pathname.startsWith('/api/')) return send(res, 404, '{}', 'application/json')
+  const tile = url.pathname.match(TILE_PATH)
+  if (tile) return serveTile(res, tile)
+  if (url.pathname.startsWith('/tiles/')) return send(res, 404, 'Not found', 'text/plain')
   return serveStatic(res, url.pathname)
 }
 
