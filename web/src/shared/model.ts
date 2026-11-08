@@ -69,9 +69,6 @@ export function cleanName(n: string): string {
 }
 export const digits = (s: string) => (s.match(/\d+/g) ?? []).join('')
 
-/** Neutral grey for a train or a line without an official colour. */
-export const NEUTRAL = '#8c8c8c'
-
 /** '#rrggbb' from a GTFS route_color, or null when absent or white (the GTFS default, i.e. no colour). */
 export function lineColor(c: string | undefined | null): string | null {
   const h = (c ?? '').replace(/^#/, '').toLowerCase()

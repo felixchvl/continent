@@ -14,7 +14,6 @@ import { token, type RGBA, type Theme } from '../theme'
 import { FLAG_GPS } from '../shared/protocol.ts'
 import { hexToRgb } from '../shared/operators.ts'
 import type { LiveStore, Shown, TripDetails, TripStop } from '../data/live'
-import { NEUTRAL } from '../shared/model.ts'
 import type { LonLat } from '../shared/geo.ts'
 
 export type Filters = { gv: boolean; cl: boolean; reg: boolean; gps: boolean; estimee: boolean; op: string | null }
@@ -44,11 +43,11 @@ type Props = {
   onReady(api: MapApi): void
 }
 
-type Palette = Record<'terre' | 'texte' | 'halo' | 'accent' | 'fond', RGBA>
+type Palette = Record<'terre' | 'texte' | 'halo' | 'accent' | 'fond' | 'neutre', RGBA>
 type Box = [number, number, number, number]
 
 const readPalette = (): Palette => ({
-  terre: token('carte-terre'),
+  terre: token('carte-terre'), neutre: token('train-neutre'),
   texte: token('carte-ville'), halo: token('carte-halo'), accent: token('accent'), fond: token('fond'),
 })
 
@@ -160,7 +159,7 @@ export function MapView(props: Props) {
       vis.gps = []
       for (let k = 0; k < n; k++) {
         const t = s.trains[s.idx[rows[k]]]
-        const [r, g, b] = rgb(t.color ?? NEUTRAL)
+        const [r, g, b] = t.color ? rgb(t.color) : paletteRef.current.neutre
         vis.colors.set([r, g, b, 255], k * 4)
         vis.radii[k] = RADIUS[t.kind]
         if (s.flags[rows[k]] & FLAG_GPS) vis.gps.push(k)
@@ -232,7 +231,7 @@ export function MapView(props: Props) {
       const pal = paletteRef.current
       const f = p.filters
       const t = Date.now()
-      const key = `${s.updated}-${s.version}-${f.gv}${f.cl}${f.reg}${f.gps}${f.estimee}-${f.op}`
+      const key = `${s.updated}-${s.version}-${f.gv}${f.cl}${f.reg}${f.gps}${f.estimee}-${f.op}-${propsRef.current.theme}`
       if (vis.key !== key) {
         rebuildVisible()
         vis.key = key
@@ -251,7 +250,8 @@ export function MapView(props: Props) {
 
       if (p.trip && selected) {
         const line = p.trip.line
-        const color = rgb(p.trip.color ?? selected.train.color ?? NEUTRAL)
+        const lc = p.trip.color ?? selected.train.color
+        const color = lc ? rgb(lc) : pal.neutre.slice(0, 3) as [number, number, number]
         let c = routeCache.current
         if (!c || c.id !== p.trip.id || t - c.t > 500) {
           c = { id: p.trip.id, t, along: line.project([selected.pos.lon, selected.pos.lat]).along }
@@ -302,7 +302,8 @@ export function MapView(props: Props) {
         }),
       )
       if (selected) {
-        const c = rgb(p.trip?.color ?? selected.train.color ?? NEUTRAL)
+        const lc = p.trip?.color ?? selected.train.color
+        const c = lc ? rgb(lc) : pal.neutre.slice(0, 3) as [number, number, number]
         const sel = [selected]
         const at = (d: Shown) => [d.pos.lon, d.pos.lat] as [number, number]
         layers.push(
