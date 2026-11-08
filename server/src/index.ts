@@ -136,9 +136,10 @@ function send(res: ServerResponse, status: number, body: Buffer | string, type: 
 }
 
 function sendGzipJson(req: IncomingMessage, res: ServerResponse, gz: Buffer) {
-  // Every browser accepts gzip; the payloads are kept compressed in memory.
+  // Every browser accepts gzip; the payloads are kept compressed in memory. They change every 5 s at
+  // most, so a CDN in front (Cloudflare) can serve one copy to every visitor for that long.
   void req
-  send(res, 200, gz, 'application/json', { 'Content-Encoding': 'gzip', 'Cache-Control': 'no-store' })
+  send(res, 200, gz, 'application/json', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=5' })
 }
 
 function detail(id: string): TrainDetail | null {
@@ -192,14 +193,14 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === '/api/health') return send(res, 200, JSON.stringify({ ...health, version, tiles: tileCount() }), 'application/json')
   if (url.pathname.startsWith('/api/train/')) {
     const d = detail(decode(url.pathname.slice('/api/train/'.length)))
-    return d ? send(res, 200, JSON.stringify(d), 'application/json') : send(res, 404, '{}', 'application/json')
+    return d ? send(res, 200, JSON.stringify(d), 'application/json', { 'Cache-Control': 'public, max-age=10' }) : send(res, 404, '{}', 'application/json')
   }
   if (url.pathname === '/api/trip') {
     // Only trains this server has seen: the endpoint is not a relay to Transitous.
     const id = url.searchParams.get('id')
     if (!id || id.length > 200) return send(res, 400, '{}', 'application/json')
     if (!seen.has(id)) return send(res, 404, '{}', 'application/json')
-    return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'max-age=30' })
+    return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'public, max-age=30' })
   }
   if (url.pathname.startsWith('/api/')) return send(res, 404, '{}', 'application/json')
   return serveStatic(res, url.pathname)
