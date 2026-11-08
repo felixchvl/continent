@@ -104,13 +104,16 @@ export async function prune() {
     delete from silver.gps_fix where ts < now() - interval '60 days';`).catch((e) => console.warn('db: prune', e.message))
 }
 
-/** The library of actors (silver.actor, built by pipeline/actors.ts), most present first; [] before the first run. */
+/** The library of actors (silver.actor, built by pipeline/actors.ts), most present first, with the names
+ * OpenStreetMap writes for each (aliases); [] before the first run. */
 export async function actors(): Promise<unknown[]> {
   if (!pool) return []
   try {
     const { rows } = await pool.query(`
-      select qid, name, kind, kinds, country, colour, website, logo_file as logo, lines, stations, parents
-      from silver.actor order by lines + stations desc, name`)
+      select a.qid, a.name, a.name_fr, a.name_en, a.kind, a.kinds, a.country, a.colour, a.website, a.logo_file as logo,
+             a.lines, a.stations, a.parents,
+             coalesce((select array_agg(n.name order by n.lines + n.stations desc) from silver.actor_name n where n.qid = a.qid), '{}') as aliases
+      from silver.actor a order by a.lines + a.stations desc, a.name`)
     return rows
   } catch {
     return [] // table not built yet

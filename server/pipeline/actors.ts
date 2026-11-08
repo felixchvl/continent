@@ -2,7 +2,8 @@
 // infrastructure managers, regions and cities. Run by osm.sh after silver.sql.
 //
 // 1. Every Wikidata id that OpenStreetMap gives for a line or a station (operator, network, the line
-//    itself) is an actor; their parent organisations are added too (two levels).
+//    itself) is an actor, and so is every operator the app knows (shared/operators.ts); their parent
+//    organisations are added too (two levels).
 // 2. Wikidata says who each one is: name (French first), kind, country, territory, parents, colour,
 //    website, logo.
 // 3. Logos are downloaded from Wikimedia Commons into $LOGOS (SVG when Commons has one), kept between
@@ -12,6 +13,7 @@
 import pg from 'pg'
 import { access, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { OPERATOR_QIDS } from '../../web/src/shared/operators.ts'
 
 const UA = 'Continent/1.0 (https://github.com/felixchvl/continent)'
 const LOGOS = process.env.LOGOS ?? '/var/lib/continent/logos'
@@ -185,6 +187,7 @@ async function main() {
     where trim(qid) ~ '^Q[0-9]+$' group by 1`)
   const counts = new Map(seeds.map((s) => [s.qid, s]))
   log(`${seeds.length} ids from OpenStreetMap`)
+  for (const q of OPERATOR_QIDS) if (!counts.has(q)) counts.set(q, { qid: q, lines: 0, stations: 0 })
 
   // 2. Describe them, then their parents (two levels).
   const actors = await describe([...counts.keys()])

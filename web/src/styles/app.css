@@ -114,6 +114,7 @@ ol, ul { list-style: none; }
 .voyage p { margin-top: 4px; }
 .voyage p::first-letter { text-transform: uppercase; }
 .etat { margin-top: -10px; }
+.exploitant { display: flex; align-items: center; gap: 8px; margin-top: -10px; }
 
 /* The timeline: 3 px line in the operator's colour, 11 px dots, text at the column */
 .frise { position: relative; }

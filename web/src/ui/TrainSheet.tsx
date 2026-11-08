@@ -3,10 +3,11 @@
 
 import type { CSSProperties } from 'react'
 import type { Shown, TripDetails, TripStop } from '../data/live'
+import { actorByName, useActors } from '../data/actors'
 import type { Operator } from '../shared/operators.ts'
 import { duree, heure, jour } from '../lib/format'
 import { Icon } from './Icon'
-import { IconButton, LogoCompagnie, Retard } from './bits'
+import { IconButton, LogoActeur, LogoCompagnie, Retard } from './bits'
 
 type Props = {
   trainId: string
@@ -53,6 +54,11 @@ export function TrainSheet(p: Props) {
   const dep = first ? real(first, 'dep') : undefined
   const nextIndex = stops.findIndex((s) => (real(s, 'arr') ?? 0) > now)
   const pos = live?.pos
+  // The agency Transitous names for the trip (DB Regio, TER Hauts-de-France...), with its logo from the
+  // library, when it says more than the operator shown above.
+  useActors()
+  const exploitantActeur = actorByName(trip?.agency)
+  const exploitant = trip?.agency && trip.agency !== op?.name && (!exploitantActeur || exploitantActeur.qid !== op?.qid) ? trip.agency : null
 
   return (
     <aside className="fiche" aria-label={`Fiche du train ${name}`} style={{ '--compagnie': color } as CSSProperties}>
@@ -74,6 +80,13 @@ export function TrainSheet(p: Props) {
             <p className="t-info">{[op && op.id !== 'autre' ? op.name : trip?.agency, dep ? jour(dep) : ''].filter(Boolean).join(', ')}</p>
           </div>
         </div>
+
+        {exploitant && (
+          <p className="t-info exploitant">
+            <LogoActeur actor={exploitantActeur} />
+            <span>Exploité par {exploitant}</span>
+          </p>
+        )}
 
         {pos && (
           <p className="t-info etat">
