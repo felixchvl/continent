@@ -115,6 +115,29 @@ export function MapView(props: Props) {
     map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right')
     map.addControl(new mapboxgl.ScaleControl({ maxWidth: 96 }), 'bottom-right')
 
+    // Station logos (Q123.svg, from the library of actors) are loaded the first time a station shows
+    // one, drawn on a small white plate so that they read on the dark theme too.
+    map.on('styleimagemissing', (e: { id: string }) => {
+      const id = e.id
+      if (!/^Q\d+\.(svg|png|jpg)$/.test(id) || map.hasImage(id)) return
+      map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) }) // placeholder while it loads
+      const img = new Image()
+      img.onload = () => {
+        const h = 28, pad = 6
+        const w = Math.min(120, Math.max(h, Math.round((h * (img.naturalWidth || 1)) / (img.naturalHeight || 1))))
+        const canvas = Object.assign(document.createElement('canvas'), { width: w + pad * 2, height: h + pad * 2 })
+        const ctx = canvas.getContext('2d')!
+        ctx.fillStyle = '#ffffff'
+        ctx.beginPath()
+        ctx.roundRect(0, 0, canvas.width, canvas.height, 8)
+        ctx.fill()
+        ctx.drawImage(img, pad, pad, w, h)
+        if (map.hasImage(id)) map.removeImage(id)
+        map.addImage(id, ctx.getImageData(0, 0, canvas.width, canvas.height), { pixelRatio: 2 })
+      }
+      img.src = `/logos/${id}`
+    })
+
     // Visible trains: rebuilt when new data arrives or a filter changes, not on every frame.
     const vis = { key: '', n: 0, rows: new Int32Array(0), colors: new Uint8Array(0), radii: new Float32Array(0), gps: [] as number[] }
     const buf = [new Float32Array(0), new Float32Array(0)]

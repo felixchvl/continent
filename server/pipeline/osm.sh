@@ -80,11 +80,14 @@ if has tiles; then
        'properties', json_strip_nulls(json_build_object('c', c, 'col', colour, 'ref', refs)),
        'geometry', st_asgeojson(geom, 6)::json)
      from silver.track where c not in ('gv', 'main', 'branch')" > urbain.geojsonseq
+  # A station carries the logo of its network, else of its operator, when the library has one.
   q "select json_build_object('type', 'Feature',
-       'tippecanoe', json_build_object('layer', 'gares', 'minzoom', case kind when 'station' then 9 when 'halt' then 11 when 'tram' then 13 else 12 end),
-       'properties', json_build_object('k', kind, 'n', name),
-       'geometry', st_asgeojson(geom, 6)::json)
-     from silver.station" > gares.geojsonseq
+       'tippecanoe', json_build_object('layer', 'gares', 'minzoom', case s.kind when 'station' then 9 when 'halt' then 11 when 'tram' then 13 else 12 end),
+       'properties', json_strip_nulls(json_build_object('k', s.kind, 'n', s.name, 'logo', coalesce(n.logo_file, o.logo_file))),
+       'geometry', st_asgeojson(s.geom, 6)::json)
+     from silver.station s
+     left join silver.actor n on n.qid = split_part(s.network_qid, ';', 1) and n.logo_file is not null
+     left join silver.actor o on o.qid = split_part(s.operator_qid, ';', 1) and o.logo_file is not null" > gares.geojsonseq
   build() {
     set_name=$1; shift
     rm -rf "$TILES/$set_name.new" "$TILES/$set_name.old"

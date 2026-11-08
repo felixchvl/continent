@@ -25,7 +25,7 @@ const NETWORK: { id: string; source: 'rail' | 'urbain'; kinds: string[]; grey: s
   { id: 'urbain-metro', source: 'urbain', kinds: ['metro', 'light_rail', 'monorail', 'funicular'], grey: 'carte-urbain', width: width(0.4, 0.7, 1.8, 4), minzoom: 9 },
 ]
 /** Everything the network button shows or hides. */
-export const NETWORK_LAYERS = [...NETWORK.map((l) => l.id), 'gares'] as const
+export const NETWORK_LAYERS = [...NETWORK.map((l) => l.id), 'gares', 'gares-logos'] as const
 
 const lineColor = (grey: string) => ['coalesce', ['get', 'col'], tokenCss(grey)] as unknown as string
 
@@ -76,6 +76,12 @@ export function buildStyle(): StyleSpecification {
           'circle-color': c('fond'), 'circle-stroke-color': c('texte'),
           'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.2] as unknown as number,
         },
+      },
+      {
+        // The logo of the station's network or operator above it (images loaded on demand, see MapView).
+        id: 'gares-logos', type: 'symbol', source: 'urbain', 'source-layer': 'gares', minzoom: 13,
+        filter: ['has', 'logo'],
+        layout: { 'icon-image': ['get', 'logo'] as unknown as string, 'icon-anchor': 'bottom', 'icon-offset': [0, -6], 'icon-padding': 2 },
       },
     ],
   }
