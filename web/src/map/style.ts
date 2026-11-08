@@ -1,5 +1,6 @@
-// Base map built from the design tokens, on Mapbox Streets vector tiles: a quiet ground
-// (land, sea, borders, roads only when zoomed in) so the operators' colours carry the map.
+// Base map built from the design tokens, on our own Protomaps extract of OpenStreetMap (served by
+// server/src/basemap.ts): a quiet ground (land, sea, borders, roads only when zoomed in) so the lines'
+// colours carry the map.
 // The rail network comes from OpenStreetMap (our own tiles, server/pipeline/osm.sh): every passenger
 // line in Europe in its line's colour or a grey (high-speed darker, main lines thicker than branch
 // lines), then metros, trams and funiculars, and the stations, from zoom 9.
@@ -7,10 +8,6 @@
 
 import type { FilterSpecification, Map as MapboxMap, StyleSpecification } from 'mapbox-gl'
 import { tokenCss } from '../theme'
-
-const notMaritime = ['match', ['to-string', ['get', 'maritime']], 'true', false, true]
-const notDisputed = ['match', ['to-string', ['get', 'disputed']], 'true', false, true]
-const worldview = ['match', ['get', 'worldview'], ['all', 'US'], true, false]
 
 const width = (z4: number, z8: number, z12: number, z16: number) =>
   ['interpolate', ['exponential', 1.4], ['zoom'], 4, z4, 8, z8, 12, z12, 16, z16]
@@ -36,21 +33,29 @@ export function buildStyle(): StyleSpecification {
     version: 8,
     projection: { name: 'mercator' },
     sources: {
-      streets: { type: 'vector', url: 'mapbox://mapbox.mapbox-streets-v8' },
-      rail: { type: 'vector', tiles: tiles('rail'), minzoom: 4, maxzoom: 13, attribution: '© OpenStreetMap' },
+      // Up to zoom 13, as cut out by the pipeline (BASE_MAXZOOM in server/pipeline/osm.sh).
+      base: {
+        type: 'vector', tiles: tiles('base'), maxzoom: 13,
+        attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      },
+      rail: { type: 'vector', tiles: tiles('rail'), minzoom: 4, maxzoom: 13 },
       urbain: { type: 'vector', tiles: tiles('urbain'), minzoom: 9, maxzoom: 14 },
     },
     layers: [
       { id: 'terre', type: 'background', paint: { 'background-color': c('carte-terre') } },
-      { id: 'mer', type: 'fill', source: 'streets', 'source-layer': 'water', paint: { 'fill-color': c('carte-mer') } },
       {
-        id: 'rivieres', type: 'line', source: 'streets', 'source-layer': 'waterway', minzoom: 8,
-        filter: ['in', ['get', 'class'], ['literal', ['river', 'canal']]],
+        // Sea, lakes and wide rivers (the water layer also has lines for rivers and points for names).
+        id: 'mer', type: 'fill', source: 'base', 'source-layer': 'water', filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'fill-color': c('carte-mer') },
+      },
+      {
+        id: 'rivieres', type: 'line', source: 'base', 'source-layer': 'water', minzoom: 8,
+        filter: ['all', ['==', ['geometry-type'], 'LineString'], ['in', ['get', 'kind'], ['literal', ['river', 'canal']]]],
         paint: { 'line-color': c('carte-mer'), 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.6, 14, 3] },
       },
       {
-        id: 'routes', type: 'line', source: 'streets', 'source-layer': 'road', minzoom: 8,
-        filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
+        id: 'routes', type: 'line', source: 'base', 'source-layer': 'roads', minzoom: 8,
+        filter: ['in', ['get', 'kind_detail'], ['literal', ['motorway', 'trunk', 'primary']]],
         paint: {
           'line-color': c('carte-frontiere'),
           'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.2, 12, 0.45],
@@ -58,8 +63,8 @@ export function buildStyle(): StyleSpecification {
         },
       },
       {
-        id: 'frontieres', type: 'line', source: 'streets', 'source-layer': 'admin',
-        filter: ['all', ['==', ['get', 'admin_level'], 0], notMaritime, notDisputed, worldview],
+        id: 'frontieres', type: 'line', source: 'base', 'source-layer': 'boundaries',
+        filter: ['==', ['get', 'kind'], 'country'],
         paint: { 'line-color': c('carte-frontiere'), 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 10, 1.2] },
       },
       ...NETWORK.map((l) => ({

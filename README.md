@@ -95,8 +95,8 @@ the server has seen, within one Transitous request a second.
 ## Stack
 
 - React + Vite + TypeScript.
-- Mapbox GL JS for the quiet base map (style built in code from the design tokens, on Mapbox Streets tiles),
-  the rail network and the stations (our own OpenStreetMap vector tiles).
+- Mapbox GL JS for the quiet base map (style built in code from the design tokens, on our Protomaps
+  extract of OpenStreetMap), the rail network and the stations (our own OpenStreetMap vector tiles).
 - deck.gl for the trains, metros and trams, the selected route and the city names (in Halyard).
 - Plain CSS with variables (`web/src/styles/tokens.css`), light and dark.
 
@@ -119,7 +119,7 @@ deployed build loads it from an Adobe Fonts web project set in `VITE_ADOBE_FONTS
 |---|---|---|
 | [Transitous](https://transitous.org) `/api/v6/map/trips`, `/api/v5/trip` | trains, timetables, delays, trip details | non-commercial use |
 | Renfe GTFS-RT `vehicle_positions_LD.json`, `trip_updates_LD.json` | GPS positions and delays in Spain | CC BY 4.0 |
-| Mapbox Streets, OpenStreetMap | base map | Mapbox terms, ODbL |
+| OpenStreetMap via [Protomaps](https://protomaps.com) builds | base map (sea, rivers, borders, roads) | ODbL |
 | OpenStreetMap via [Geofabrik](https://download.geofabrik.de) extracts | rail network, lines, stations (the data OpenRailwayMap draws) | ODbL |
 | [Wikidata](https://www.wikidata.org), [Wikimedia Commons](https://commons.wikimedia.org) | library of actors, logos | CC0; each logo its own licence |
 

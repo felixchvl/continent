@@ -173,7 +173,7 @@ export function Panel(p: Props) {
 
       <footer className="pied t-legal secondaire">
         Tous les trains d'Europe, grandes lignes et régionaux ; la couleur du point est celle de sa ligne, grise quand la ligne n'en a pas. Positions GPS en Espagne (Renfe) ; ailleurs, positions estimées à partir des
-        horaires et des retards en temps réel, via Transitous. Fond © Mapbox © OpenStreetMap.
+        horaires et des retards en temps réel, via Transitous. Fond Protomaps © OpenStreetMap.
       </footer>
     </aside>
   )
