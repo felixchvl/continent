@@ -8,6 +8,8 @@
 #   actors    the library of operators, networks and authorities, with their logos (actors.ts)
 #   tiles     vector tiles for the map: rail (z4-13, every passenger line) and urbain (z9-14:
 #             metros, trams, funiculars and the stations), swapped in atomically
+#   basemap   the base map under the network (sea, lakes, rivers, borders, roads): Europe cut out of the
+#             latest Protomaps build of OpenStreetMap with `pmtiles extract`, served by src/basemap.ts
 #
 # STAGES picks the stages (default: all). About 30 GB pass through the download, a few hundred MB stay.
 set -eu
@@ -16,7 +18,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=${WORK:-/var/lib/continent/osm}
 TILES=${TILES:-/var/lib/continent/tiles}
 DB=${DB:-continent}
-STAGES=${STAGES:-download load silver actors tiles}
+STAGES=${STAGES:-download load silver actors tiles basemap}
+BASEMAP=${BASEMAP:-/var/lib/continent/basemap/europe.pmtiles}
+# Europe as the map shows it (Iceland and the Canaries to the Caucasus), up to zoom 13: the map draws the
+# base map's few layers (water, borders, main roads) overzoomed beyond.
+BBOX=${BBOX:--25,27,45,72}
+BASE_MAXZOOM=${BASE_MAXZOOM:-13}
 UA='Continent (https://github.com/felixchvl/continent)'
 # One extract per country (Geofabrik also has overlapping ones: alps, dach, britain-and-ireland...).
 COUNTRIES=${COUNTRIES:-'albania andorra austria belarus belgium bosnia-herzegovina bulgaria croatia czech-republic
@@ -116,6 +123,22 @@ if has tiles; then
   build urbain -Z9 -z14 --coalesce --reorder --simplification=2 --simplify-only-low-zooms --drop-densest-as-needed \
     -P urbain.geojsonseq gares.geojsonseq
   du -sh "$TILES"/rail "$TILES"/urbain
+fi
+
+if has basemap; then
+  log basemap
+  if command -v pmtiles >/dev/null; then
+    build=$(curl -fsS -A "$UA" https://build-metadata.protomaps.dev/builds.json |
+      node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => console.log(JSON.parse(s).at(-1).key))')
+    mkdir -p "$(dirname "$BASEMAP")"
+    rm -f "$BASEMAP.new"
+    pmtiles extract "https://build.protomaps.com/$build" "$BASEMAP.new" --bbox="$BBOX" --maxzoom="$BASE_MAXZOOM" \
+      --download-threads=4
+    mv "$BASEMAP.new" "$BASEMAP" # the server reopens it within a minute
+    log "basemap: $build, $(du -h "$BASEMAP" | cut -f1)"
+  else
+    log "basemap: pmtiles is not installed, skipped"
+  fi
 fi
 
 sql <<EOF

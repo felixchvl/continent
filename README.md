@@ -46,7 +46,9 @@ npm run dev
   (`bronze` = what was fetched, `silver` = cleaned rows) for later statistics;
 - from zoom 12 the app asks `/api/urbain/12/x/y` for the metros, trams and funiculars of each tile in
   view; the server asks Transitous for that tile only, keeps it 30 s and makes at most one request a second;
-- it serves the vector tiles (`/tiles/rail`, `/tiles/urbain`), the library of actors (`/api/actors`) and
+- it serves the vector tiles (`/tiles/rail`, `/tiles/urbain`, and `/tiles/base`, the base map read from
+  a Protomaps archive and cut down to the water, borders and roads the map draws, `src/basemap.ts`),
+  the library of actors (`/api/actors`) and
   their logos (`/logos/Q….svg`, with a sandboxing CSP since the SVGs come from Wikimedia Commons);
 - `/api/train/:id` says which OpenStreetMap line the train runs on (same reference within about 2 km,
   `silver.line_shape`), with the logos of the line and its network;
@@ -73,6 +75,9 @@ npm run dev
 5. **tiles**: tracks merged into long lines first (OSM's short ways otherwise simplify into dashes), then
    `rail` (z4-13: high-speed and main lines from zoom 4, branch lines from 6) and `urbain` (z9-14: metros,
    trams, funiculars, stations with their logo), unsimplified at their maximum zoom, swapped in atomically.
+6. **basemap**: Europe (z0-13) cut out of the latest [Protomaps](https://protomaps.com) build of
+   OpenStreetMap with `pmtiles extract` into `/var/lib/continent/basemap/europe.pmtiles`; needs the
+   [pmtiles](https://github.com/protomaps/go-pmtiles) command, skipped without it.
 
 The site is public at **https://continent.felixchevalier.fr**: DNS at Infomaniak → home public IP → the
 home Caddy (LXC 110, [`server/deploy/caddy-continent.caddy`](server/deploy/caddy-continent.caddy), installed

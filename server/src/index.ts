@@ -13,13 +13,15 @@ import { FLAG_GPS, FLAG_MOVING, FLAG_RT, KINDS, type Meta, type TrainDetail } fr
 import type { Operator } from '../../web/src/shared/operators.ts'
 import { Busy, collect, tileCount, trip } from './transitous.ts'
 import { urbanTile } from './urbain.ts'
+import { baseTile } from './basemap.ts'
 import { encodePolyline, isStraight, loadPaths, pathFor, segmentKey } from './snap.ts'
 import { Line, decodePolyline, type LonLat } from '../../web/src/shared/geo.ts'
 import * as db from './db.ts'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const DIST = resolve(import.meta.dirname, process.env.DIST ?? '../../web/dist')
-// Vector tiles built by web/scripts/build-rail.sh (gzipped .pbf in z/x/y folders), one folder per set.
+// Vector tiles built by pipeline/osm.sh (gzipped .pbf in z/x/y folders), one folder per set; the base
+// map comes from a PMTiles archive instead (basemap.ts).
 const TILES = process.env.TILES ?? '/var/lib/continent/tiles'
 // Logos of the library of actors, downloaded from Wikimedia Commons by pipeline/actors.ts.
 const LOGOS = process.env.LOGOS ?? '/var/lib/continent/logos'
@@ -269,6 +271,13 @@ const TILE_PATH = /^\/tiles\/([a-z]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.pbf$/
  * Cached 10 minutes only: the tiles are rebuilt and copied without a new version of the web app. */
 async function serveTile(res: ServerResponse, m: RegExpMatchArray) {
   const [, set, z, x, y] = m
+  if (set === 'base') {
+    // The base map changes once a month: a day in caches.
+    const body = await baseTile(Number(z), Number(x), Number(y))
+    if (body) return send(res, 200, body, 'application/x-protobuf', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=86400' })
+    res.writeHead(204, { 'Cache-Control': 'public, max-age=3600' })
+    return res.end()
+  }
   try {
     const body = await readFile(join(TILES, set, z, x, `${y}.pbf`))
     send(res, 200, body, 'application/x-protobuf', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=600' })
