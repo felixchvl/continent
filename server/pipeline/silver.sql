@@ -7,7 +7,7 @@
 
 create schema if not exists silver;
 
--- An OpenStreetMap colour (#rgb, rrggbb, a few names) as '#rrggbb'; white counts as no colour.
+-- An OpenStreetMap colour (#rgb, rrggbb, a few names) as '#rrggbb'; white or near-white counts as no colour.
 create or replace function silver.hex_colour(c text) returns text language sql immutable as $$
   select nullif(case
     when v ~ '^#?[0-9a-f]{6}$' then '#' || right(v, 6)
@@ -23,10 +23,18 @@ create or replace function silver.hex_colour(c text) returns text language sql i
   from (select lower(trim(c)) as v) x
 $$;
 
+create or replace function silver.line_colour(c text) returns text language sql immutable as $$
+  select case when h is null then null
+              when (0.2126 * ('x' || substr(h, 2, 2))::bit(8)::int + 0.7152 * ('x' || substr(h, 4, 2))::bit(8)::int
+                    + 0.0722 * ('x' || substr(h, 6, 2))::bit(8)::int) / 255 > 0.85 then null
+              else h end
+  from (select silver.hex_colour(c) as h) x
+$$;
+
 -- Lines: a route master is the line; a route that belongs to no master stands for itself.
 drop table if exists silver.line cascade;
 create table silver.line as
-select r.relation_id as id, r.route as mode, r.master, r.ref, r.name, silver.hex_colour(r.colour) as colour,
+select r.relation_id as id, r.route as mode, r.master, r.ref, r.name, silver.line_colour(r.colour) as colour,
        r.network, r.operator,
        nullif(r.network_wikidata, '') as network_qid, nullif(r.operator_wikidata, '') as operator_qid, nullif(r.wikidata, '') as qid
 from osm.route r
@@ -39,7 +47,7 @@ alter table silver.line add primary key (id);
 -- Each route, the line it belongs to, and the colour to draw it in (its own, else its line's).
 create temporary table route_line as
 select r.relation_id as route_id, coalesce(rm.relation_id, r.relation_id) as line_id,
-       coalesce(silver.hex_colour(r.colour), silver.hex_colour(rm.colour)) as colour, coalesce(r.ref, rm.ref) as ref
+       coalesce(silver.line_colour(r.colour), silver.line_colour(rm.colour)) as colour, coalesce(r.ref, rm.ref) as ref
 from osm.route r
 left join osm.route_member mm on mm.type = 'r' and mm.ref = r.relation_id
 left join osm.route rm on rm.relation_id = mm.relation_id and rm.master

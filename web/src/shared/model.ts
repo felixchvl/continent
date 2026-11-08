@@ -69,10 +69,13 @@ export function cleanName(n: string): string {
 }
 export const digits = (s: string) => (s.match(/\d+/g) ?? []).join('')
 
-/** '#rrggbb' from a GTFS route_color, or null when absent or white (the GTFS default, i.e. no colour). */
+/** '#rrggbb' from a GTFS route_color, or null when absent or white-ish: white is the GTFS default
+ * (no colour), and some feeds put an off-white (Renfe: #f2f5f5) that vanishes on the map. */
 export function lineColor(c: string | undefined | null): string | null {
   const h = (c ?? '').replace(/^#/, '').toLowerCase()
-  return /^[0-9a-f]{6}$/.test(h) && h !== 'ffffff' ? `#${h}` : null
+  if (!/^[0-9a-f]{6}$/.test(h)) return null
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.85 ? null : `#${h}`
 }
 
 // ---- Transitous segments -> trains ------------------------------------------------------------
