@@ -14,10 +14,23 @@ const byName = new Map<string, Actor>()
 let loaded: Promise<void> | null = null
 const listeners = new Set<() => void>()
 
-// "DB Fernverkehr AG", "Eusko Trenbideak S.A.", "SNCF Voyageurs" -> comparable keys.
-const LEGAL = /\b(ag|gmbh|mbh|sa|spa|ltd|plc|as|ab|oy|oyj|nv|bv|srl|sas|sl|zrt|doo|ad|kg|se|inc|limited)\b/g
-export const nameKey = (s: string) =>
-  s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\b(\w) (\w)\b/g, '$1$2').replace(LEGAL, ' ').replace(/\s+/g, ' ').trim()
+// "DB Fernverkehr AG", "Trenitalia S.p.A.", "Wiener Linien GmbH & Co KG" -> comparable keys: no accents,
+// no punctuation, initials joined (S.p.A. -> spa), legal forms dropped.
+const LEGAL = new Set(['ag', 'gmbh', 'mbh', 'sa', 'spa', 'ltd', 'plc', 'as', 'ab', 'oy', 'oyj', 'nv', 'bv', 'srl', 'sas', 'sl', 'zrt',
+  'doo', 'ad', 'kg', 'se', 'inc', 'limited', 'co', 'cie'])
+export function nameKey(s: string): string {
+  const words = s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  const joined: string[] = []
+  let initials = false // inside a run of single letters (S p A)
+  for (const w of words) {
+    if (w.length === 1 && initials) joined[joined.length - 1] += w
+    else {
+      joined.push(w)
+      initials = w.length === 1
+    }
+  }
+  return joined.filter((w) => !LEGAL.has(w)).join(' ')
+}
 
 export function loadActors(): Promise<void> {
   loaded ??= fetch('/api/actors')
