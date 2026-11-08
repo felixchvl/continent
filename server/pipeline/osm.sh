@@ -6,6 +6,8 @@
 #   load      into PostgreSQL, schema osm (bronze), with osm2pgsql and rail.lua
 #   silver    silver.line, silver.track, silver.station (silver.sql)
 #   actors    the library of operators, networks and authorities, with their logos (actors.ts)
+#   stations  the directory of stations: Trainline's references (UIC code, city, main station), the
+#             station's manager and its logo, the Wikipedia article and its image (stations.ts)
 #   tiles     vector tiles for the map: rail (z4-13, every passenger line) and urbain (z9-14:
 #             metros, trams, funiculars and the stations), swapped in atomically
 #   basemap   the base map under the network (sea, lakes, rivers, borders, roads): Europe cut out of the
@@ -18,7 +20,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=${WORK:-/var/lib/continent/osm}
 TILES=${TILES:-/var/lib/continent/tiles}
 DB=${DB:-continent}
-STAGES=${STAGES:-download load silver actors tiles basemap}
+STAGES=${STAGES:-download load silver actors stations tiles basemap}
 BASEMAP=${BASEMAP:-/var/lib/continent/basemap/europe.pmtiles}
 # Europe as the map shows it (Iceland and the Canaries to the Caucasus), up to zoom 12 (6.8 GB; zoom 13 is
 # 14 GB, too much to swap on the server): the map draws its few layers (water, borders, roads) overzoomed beyond.
@@ -78,6 +80,11 @@ if has actors && [ -f "$HERE/actors.ts" ]; then
   node "$HERE/actors.ts"
 fi
 
+if has stations; then
+  log "stations"
+  node "$HERE/stations.ts"
+fi
+
 if has tiles; then
   log "tiles"
   q() { psql -X -At -v ON_ERROR_STOP=1 -d "$DB" -c "$1"; }
@@ -101,14 +108,15 @@ if has tiles; then
        'properties', json_strip_nulls(json_build_object('c', c, 'col', colour, 'ref', refs)),
        'geometry', st_asgeojson(geom, 6)::json)
      from m" > urbain.geojsonseq
-  # A station carries the logo of its network, else of its operator, when the library has one.
-  q "select json_build_object('type', 'Feature',
+  # A station carries its id (the app asks /api/gare/:id when it is clicked), whether it is its city's
+  # main station, and the logo of its manager (stations.ts), not of the networks that stop there.
+  q "select json_build_object('type', 'Feature', 'id', s.id,
        'tippecanoe', json_build_object('layer', 'gares', 'minzoom', case s.kind when 'station' then 9 when 'halt' then 11 when 'tram' then 13 else 12 end),
-       'properties', json_strip_nulls(json_build_object('k', s.kind, 'n', s.name, 'logo', coalesce(n.logo_file, o.logo_file))),
+       'properties', json_strip_nulls(json_build_object('k', s.kind, 'n', s.name, 'logo', l.logo_file, 'm', case when i.main then 1 end)),
        'geometry', st_asgeojson(s.geom, 6)::json)
      from silver.station s
-     left join silver.actor n on n.qid = split_part(s.network_qid, ';', 1) and n.logo_file is not null
-     left join silver.actor o on o.qid = split_part(s.operator_qid, ';', 1) and o.logo_file is not null" > gares.geojsonseq
+     left join silver.station_info i on i.id = s.id
+     left join silver.actor l on l.qid = i.logo_qid" > gares.geojsonseq
   build() {
     set_name=$1; shift
     rm -rf "$TILES/$set_name.new" "$TILES/$set_name.old"
