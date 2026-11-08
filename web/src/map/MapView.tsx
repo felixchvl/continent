@@ -1,5 +1,6 @@
-// The map: Mapbox GL draws the quiet base map; deck.gl draws the network, every train in Europe
-// as a dot in its operator's colour, the selected route and the city names in Halyard.
+// The map: Mapbox GL draws the quiet base map and the rail network (OpenStreetMap tiles); deck.gl
+// draws every train in Europe as a dot in its operator's colour, the selected route and the city
+// names in Halyard.
 // Dots are moved ~15 times per second between two server updates, without re-rendering React.
 
 import { useEffect, useRef } from 'react'
@@ -8,7 +9,7 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import type { Layer, PickingInfo } from '@deck.gl/core'
-import { applyTheme, buildStyle } from './style'
+import { applyTheme, buildStyle, setNetworkVisible } from './style'
 import { token, type RGBA, type Theme } from '../theme'
 import { FLAG_GPS } from '../shared/protocol.ts'
 import { hexToRgb } from '../shared/operators.ts'
@@ -16,7 +17,6 @@ import type { LiveStore, Shown, TripDetails, TripStop } from '../data/live'
 import type { LonLat } from '../shared/geo.ts'
 
 export type Filters = { gv: boolean; cl: boolean; reg: boolean; gps: boolean; estimee: boolean; op: string | null }
-export type Network = { gv: number[][]; cl: number[][] }
 /** [lon, lat, name, minZoom, capital, priority] — see scripts/build-villes.ts */
 export type City = [number, number, string, number, number, number]
 export type Padding = { top: number; right: number; bottom: number; left: number }
@@ -30,7 +30,7 @@ export type Hover = { shown: Shown; x: number; y: number }
 
 type Props = {
   store: LiveStore
-  network: Network | null
+  network: boolean
   cities: City[]
   theme: Theme
   filters: Filters
@@ -43,11 +43,11 @@ type Props = {
   onReady(api: MapApi): void
 }
 
-type Palette = Record<'terre' | 'gv' | 'cl' | 'texte' | 'halo' | 'accent' | 'fond', RGBA>
+type Palette = Record<'terre' | 'texte' | 'halo' | 'accent' | 'fond', RGBA>
 type Box = [number, number, number, number]
 
 const readPalette = (): Palette => ({
-  terre: token('carte-terre'), gv: token('carte-reseau-gv'), cl: token('carte-reseau-classique'),
+  terre: token('carte-terre'),
   texte: token('carte-ville'), halo: token('carte-halo'), accent: token('accent'), fond: token('fond'),
 })
 
@@ -91,7 +91,7 @@ export function MapView(props: Props) {
   propsRef.current = props
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const paletteRef = useRef<Palette>(readPalette())
-  const staticLayers = useRef<{ network: Layer[]; key: string; cities: Layer[] }>({ network: [], key: '', cities: [] })
+  const staticLayers = useRef<{ key: string; cities: Layer[] }>({ key: '', cities: [] })
   const userPos = useRef<LonLat | null>(null)
   const routeCache = useRef<{ id: string; t: number; along: number } | null>(null)
 
@@ -245,7 +245,7 @@ export function MapView(props: Props) {
       const zoom = map.getZoom()
       const scale = radiusScale(zoom)
       const selected = p.selectedId ? s.get(p.selectedId, t) : null
-      const layers: Layer[] = [...staticLayers.current.network]
+      const layers: Layer[] = []
       let stopNames: Layer | null = null
 
       if (p.trip && selected) {
@@ -372,20 +372,13 @@ export function MapView(props: Props) {
     else map.once('load', () => applyTheme(map))
   }, [props.theme])
 
+  // The rail network is a Mapbox layer group; the network button shows or hides it.
   useEffect(() => {
-    const pal = paletteRef.current
-    const n = props.network
-    staticLayers.current.network = n
-      ? (['cl', 'gv'] as const).map(
-          (k) =>
-            new PathLayer<number[]>({
-              id: `reseau-${k}`, data: n[k], getPath: (d) => d as unknown as [number, number][], positionFormat: 'XY',
-              _pathType: 'open', getColor: pal[k], widthUnits: 'pixels', getWidth: k === 'gv' ? 1.4 : 1,
-              widthMinPixels: 0.7, capRounded: true, jointRounded: true,
-            }) as unknown as Layer,
-        )
-      : []
-  }, [props.network, props.theme])
+    const map = mapRef.current
+    if (!map) return
+    if (map.isStyleLoaded()) setNetworkVisible(map, props.network)
+    else map.once('load', () => setNetworkVisible(map, propsRef.current.network))
+  }, [props.network])
 
   useEffect(() => {
     mapRef.current?.easeTo({ padding: props.padding, duration: 300 })

@@ -185,14 +185,15 @@ async function serveStatic(res: ServerResponse, path: string) {
 
 const TILE_PATH = /^\/tiles\/([a-z]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.pbf$/
 
-/** A vector tile, already gzipped on disk; a tile with nothing in it answers 204, which maps read as empty. */
+/** A vector tile, already gzipped on disk; a tile with nothing in it answers 204, which maps read as empty.
+ * Cached 10 minutes only: the tiles are rebuilt and copied without a new version of the web app. */
 async function serveTile(res: ServerResponse, m: RegExpMatchArray) {
   const [, set, z, x, y] = m
   try {
     const body = await readFile(join(TILES, set, z, x, `${y}.pbf`))
-    send(res, 200, body, 'application/x-protobuf', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=86400' })
+    send(res, 200, body, 'application/x-protobuf', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=600' })
   } catch {
-    res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' })
+    res.writeHead(204, { 'Cache-Control': 'public, max-age=600' })
     res.end()
   }
 }

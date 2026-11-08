@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapView, type City, type Filters, type Hover, type MapApi, type Network, type Padding } from './map/MapView'
+import { MapView, type City, type Filters, type Hover, type MapApi, type Padding } from './map/MapView'
 import { LiveStore, fetchTrip, type Shown, type TripDetails } from './data/live'
 import { RENFE, operatorOf, type Operator } from './shared/operators.ts'
 import { useTheme } from './theme'
@@ -28,7 +28,6 @@ export default function App() {
   const { pref, theme, cycle } = useTheme()
   const mobile = useMobile()
   const [filters, setFilters] = useState<Filters>({ gv: true, cl: true, reg: true, gps: true, estimee: true, op: null })
-  const [network, setNetwork] = useState<Network | null>(null)
   const [cities, setCities] = useState<City[]>([])
   const [showNetwork, setShowNetwork] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(location.search).get('train'))
@@ -55,7 +54,6 @@ export default function App() {
   }, [store])
 
   useEffect(() => {
-    fetch('/data/reseau.json').then((r) => r.json()).then(setNetwork).catch(() => setNetwork(null))
     fetch('/data/villes.json').then((r) => r.json()).then(setCities).catch(() => setCities([]))
   }, [])
 
@@ -152,7 +150,7 @@ export default function App() {
     <div className={`app${mobile ? ' mobile' : ''}${selectedId ? ' avec-fiche' : ''}`}>
       <MapView
         store={store}
-        network={showNetwork ? network : null}
+        network={showNetwork}
         cities={cities}
         theme={theme}
         filters={filters}
