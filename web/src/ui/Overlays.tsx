@@ -6,7 +6,7 @@ import type { ThemePref, Theme } from '../theme'
 import { fetchDetail } from '../data/live'
 import type { TrainDetail } from '../shared/protocol.ts'
 import { heure } from '../lib/format'
-import { IconButton, LogoCompagnie, Retard } from './bits'
+import { IconButton, LogoCompagnie, LogosLigne, Retard } from './bits'
 
 export function Tooltip({ hover }: { hover: Hover }) {
   const { train, pos } = hover.shown
@@ -25,7 +25,8 @@ export function Tooltip({ hover }: { hover: Hover }) {
   return (
     <div className="infobulle" style={{ left: hover.x + (flip ? -16 : 16), top: hover.y + 16, transform: flip ? 'translateX(-100%)' : undefined }}>
       <div className="infobulle-titre">
-        <LogoCompagnie op={train.op} height={16} />
+        {(train.op.logo || train.op.qid || !detail?.line) && <LogoCompagnie op={train.op} height={16} />}
+        <LogosLigne line={detail?.line} height={16} />
         <span className="t-corps">{train.name || train.op.name}</span>
       </div>
       <span className="t-info">

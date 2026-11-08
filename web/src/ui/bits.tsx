@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import type { Pos } from '../data/live'
 import type { Operator } from '../shared/operators.ts'
+import type { LineInfo } from '../shared/protocol.ts'
 import { actorByQid, logoUrl, useActors, type Actor } from '../data/actors'
 import { Icon, type IconName } from './Icon'
 
@@ -33,6 +34,17 @@ export function LogoCompagnie({ op, height = 20 }: { op: Operator; height?: numb
   const src = op.logo ? `/logos/${op.logo}` : logoUrl(actorByQid(op.qid))
   if (!src) return <i className="pastille-compagnie" style={{ background: op.color, width: height, height }} aria-label={op.name} />
   return <img className="logo-compagnie" src={src} alt={op.name} style={{ height }} />
+}
+
+/** The logos of a train's network and line (RER + B, S-Bahn + S1), when the library has them. */
+export function LogosLigne({ line, height = 20 }: { line: LineInfo | null | undefined; height?: number }) {
+  if (!line || (!line.logo && !line.networkLogo)) return null
+  return (
+    <span className="logos-ligne">
+      {line.networkLogo && <img className="logo-compagnie" src={`/logos/${line.networkLogo}`} alt={line.network ?? ''} style={{ height }} />}
+      {line.logo && <img className="logo-compagnie" src={`/logos/${line.logo}`} alt={line.name ?? line.ref} style={{ height }} />}
+    </span>
+  )
 }
 
 /** An actor of the library (an agency, a network...) by its logo, or nothing when it has none. */

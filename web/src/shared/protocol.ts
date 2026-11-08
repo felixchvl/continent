@@ -22,9 +22,14 @@ export const FLAG_RT = 4
 /** One row of `live.d`: meta index, lon×1e5, lat×1e5, bearing (deg), speed (m/s ×10), delay (min), flags. */
 export type LiveRow = { i: number; lon: number; lat: number; bearing: number; mps: number; delay: number; flags: number }
 
+/** The line a train runs on, found in OpenStreetMap (RER B, S1, RE2...), with the logos of the line
+ * and of its network from the library of actors. */
+export type LineInfo = { ref: string; name: string | null; colour: string | null; logo: string | null; network: string | null; networkLogo: string | null }
+
 export type TrainDetail = {
   id: string
   name: string
+  line?: LineInfo | null
   next: { name: string; arr: number | null; tz?: string } | null
   speed: number | null
   delay: number

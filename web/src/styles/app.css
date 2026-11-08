@@ -48,7 +48,8 @@ ol, ul { list-style: none; }
 .trait-compagnie { flex: none; width: 3px; height: 22px; border-radius: 2px; }
 .logo-compagnie { display: block; width: auto; max-width: 72px; object-fit: contain; object-position: left center; }
 .logo-case { flex: none; width: 64px; display: flex; align-items: center; }
-.logo-titre { display: flex; align-items: center; min-height: 30px; }
+.logo-titre { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.logos-ligne { display: inline-flex; align-items: center; gap: 4px; }
 /* Logos are drawn for white backgrounds: in dark mode they sit on a small white tile. */
 :root[data-theme='sombre'] .logo-compagnie { background: #fff; padding: 2px 4px; border-radius: 3px; box-sizing: content-box; }
 

@@ -1,13 +1,14 @@
 // Train sheet, after the mockup's "Déplacement" screen: the journey as a vertical line in the
 // operator's colour, a dot per station, station names large, details written as sentences.
 
-import type { CSSProperties } from 'react'
-import type { Shown, TripDetails, TripStop } from '../data/live'
-import { actorByName, useActors } from '../data/actors'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { fetchDetail, type Shown, type TripDetails, type TripStop } from '../data/live'
+import type { LineInfo } from '../shared/protocol.ts'
+import { actorByName, actorByQid, useActors } from '../data/actors'
 import type { Operator } from '../shared/operators.ts'
 import { duree, heure, jour } from '../lib/format'
 import { Icon } from './Icon'
-import { IconButton, LogoActeur, LogoCompagnie, Retard } from './bits'
+import { IconButton, LogoActeur, LogoCompagnie, LogosLigne, Retard } from './bits'
 
 type Props = {
   trainId: string
@@ -54,6 +55,14 @@ export function TrainSheet(p: Props) {
   const dep = first ? real(first, 'dep') : undefined
   const nextIndex = stops.findIndex((s) => (real(s, 'arr') ?? 0) > now)
   const pos = live?.pos
+  // The line in OpenStreetMap (RER B, S1...), for its logos: asked once per train, refreshed with the sheet.
+  const [line, setLine] = useState<LineInfo | null>(null)
+  useEffect(() => {
+    let alive = true
+    setLine(null)
+    void fetchDetail(p.trainId).then((d) => alive && setLine(d?.line ?? null))
+    return () => void (alive = false)
+  }, [p.trainId])
   // The agency Transitous names for the trip (DB Regio, TER Hauts-de-France...), with its logo from the
   // library, when it says more than the operator shown above.
   useActors()
@@ -74,7 +83,10 @@ export function TrainSheet(p: Props) {
 
       <div className="fiche-defile">
         <div className="voyage">
-          <span className="logo-titre">{op ? <LogoCompagnie op={op} height={24} /> : <span className="pastille-compagnie" />}</span>
+          <span className="logo-titre">
+            {op ? (!line?.logo && !line?.networkLogo) || op.logo || actorByQid(op.qid)?.logo ? <LogoCompagnie op={op} height={24} /> : null : <span className="pastille-compagnie" />}
+            <LogosLigne line={line} height={24} />
+          </span>
           <div>
             <h1 className="t-voyage">{last ? `${name} vers ${last.name}` : name}</h1>
             <p className="t-info">{[op && op.id !== 'autre' ? op.name : trip?.agency, dep ? jour(dep) : ''].filter(Boolean).join(', ')}</p>

@@ -234,8 +234,12 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === '/api/live') return sendGzipJson(req, res, liveBody)
   if (url.pathname === '/api/health') return send(res, 200, JSON.stringify({ ...health, version, tiles: tileCount() }), 'application/json')
   if (url.pathname.startsWith('/api/train/')) {
-    const d = detail(decode(url.pathname.slice('/api/train/'.length)))
-    return d ? send(res, 200, JSON.stringify(d), 'application/json', { 'Cache-Control': 'public, max-age=10' }) : send(res, 404, '{}', 'application/json')
+    const id = decode(url.pathname.slice('/api/train/'.length))
+    const d = detail(id)
+    if (!d) return send(res, 404, '{}', 'application/json')
+    const p = positionAt(trains.get(id)!, Date.now())
+    d.line = p ? await db.lineAt(d.name, p.lon, p.lat) : null
+    return send(res, 200, JSON.stringify(d), 'application/json', { 'Cache-Control': 'public, max-age=10' })
   }
   if (url.pathname === '/api/trip') {
     // Only trains this server has seen: the endpoint is not a relay to Transitous.

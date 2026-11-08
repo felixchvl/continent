@@ -8,6 +8,7 @@ import pg from 'pg'
 import { gzipSync } from 'node:zlib'
 import type { Train } from '../../web/src/shared/model.ts'
 import type { FetchLog } from './transitous.ts'
+import type { LineInfo } from '../../web/src/shared/protocol.ts'
 
 const SCHEMA = `
 create schema if not exists bronze;
@@ -102,6 +103,40 @@ export async function prune() {
     delete from bronze.fetch_log where fetched_at < now() - interval '7 days';
     delete from bronze.renfe where fetched_at < now() - interval '3 days';
     delete from silver.gps_fix where ts < now() - interval '60 days';`).catch((e) => console.warn('db: prune', e.message))
+}
+
+const lineCache = new Map<string, { at: number; line: LineInfo | null }>()
+
+/**
+ * The OpenStreetMap line a train is on: same reference (its name, 'RE 2' or 'RE2', its first word) and
+ * running within about 2 km of where the train is. Cached an hour per name and area.
+ */
+export async function lineAt(trainName: string, lon: number, lat: number): Promise<LineInfo | null> {
+  if (!pool || !trainName) return null
+  const words = trainName.toUpperCase().split(/\s+/).filter(Boolean)
+  const refs = [...new Set([words.join(''), words.slice(0, 2).join(''), words[0]])].filter((r) => r.length <= 8)
+  if (!refs.length) return null
+  const key = `${refs.join('|')}@${lon.toFixed(1)},${lat.toFixed(1)}`
+  const hit = lineCache.get(key)
+  if (hit && Date.now() - hit.at < 3_600_000) return hit.line
+  let line: LineInfo | null = null
+  try {
+    const { rows } = await pool.query<LineInfo>(`
+      select l.ref, l.name, l.colour, la.logo_file as logo, coalesce(na.name, l.network) as network, na.logo_file as "networkLogo"
+      from silver.line l join silver.line_shape s on s.id = l.id
+      left join silver.actor la on la.qid = l.qid
+      left join silver.actor na on na.qid = split_part(l.network_qid, ';', 1)
+      where upper(replace(l.ref, ' ', '')) = any($1) and l.mode <> 'railway'
+        and st_dwithin(s.geom, st_setsrid(st_point($2, $3), 4326), 0.02)
+      order by array_position($1, upper(replace(l.ref, ' ', ''))), st_distance(s.geom, st_setsrid(st_point($2, $3), 4326))
+      limit 1`, [refs, lon, lat])
+    line = rows[0] ?? null
+  } catch {
+    line = null // silver tables not built yet
+  }
+  lineCache.set(key, { at: Date.now(), line })
+  if (lineCache.size > 20_000) lineCache.delete(lineCache.keys().next().value!)
+  return line
 }
 
 /** The library of actors (silver.actor, built by pipeline/actors.ts), most present first, with the names
