@@ -3,7 +3,8 @@
 // colours carry the map.
 // The rail network comes from OpenStreetMap (our own tiles, server/pipeline/osm.sh): every passenger
 // line in Europe in its line's colour or a grey (high-speed darker, main lines thicker than branch
-// lines), then metros, trams and funiculars, and the stations, from zoom 9.
+// lines), then metros, trams and funiculars, and the stations, from zoom 9, each with its manager's logo
+// from zoom 13; a click on a station opens its sheet.
 // City names are drawn by deck.gl in Halyard, like the rest of the interface.
 
 import type { FilterSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
@@ -73,19 +74,17 @@ export function buildStyle(): StyleSpecification {
         paint: { 'line-color': lineColor(l.grey), 'line-width': l.width as number },
       })),
       {
-        // Stations: white dots ringed in black, like the stops on the train sheet.
+        // Stations: the same white dot ringed in black for every one, like the stops on the train sheet.
         id: 'gares', type: 'circle', source: 'urbain', 'source-layer': 'gares', minzoom: 9,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'],
-            9, ['match', ['get', 'k'], ['station'], 2.4, 1.6],
-            12, ['match', ['get', 'k'], ['station'], 4, ['halt'], 3, 2.4],
-            16, ['match', ['get', 'k'], ['station'], 6.5, ['halt'], 5, 4]] as unknown as number,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2.4, 12, 3.4, 16, 5.5] as unknown as number,
           'circle-color': c('fond'), 'circle-stroke-color': c('texte'),
           'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.6] as unknown as number,
         },
       },
       {
-        // The logo of the station's network or operator above it (images loaded on demand, see MapView).
+        // The logo of the station's manager above it (SNCF Gares & Connexions, RATP...), not of the networks
+        // that stop there (images loaded on demand, see MapView).
         id: 'gares-logos', type: 'symbol', source: 'urbain', 'source-layer': 'gares', minzoom: 13,
         filter: ['has', 'logo'],
         layout: { 'icon-image': ['get', 'logo'] as unknown as string, 'icon-anchor': 'bottom', 'icon-offset': [0, -6], 'icon-padding': 2 },
