@@ -1,6 +1,7 @@
 -- Turns the osm schema (bronze, loaded by osm2pgsql with rail.lua) into the tables the map and the
 -- library of actors use:
 --   silver.line     the lines (M4, RER B, S1, TER Lyon–Grenoble...): a route master, or a route alone
+--   silver.line_shape  where each line runs
 --   silver.track    the tracks to draw, with their kind and the colour of the line running on them
 --   silver.station  stations, halts, metro and tram stops
 -- Re-run as a whole after every load.
@@ -82,6 +83,18 @@ where w.service is null
   and coalesce(w.usage, '') not in ('industrial', 'military', 'test', 'tourism')
   and coalesce(w.tags->>'railway:preserved', '') <> 'yes';
 alter table silver.track add primary key (id);
+
+-- Where each line runs (its routes' ways, simplified): lets the server tell which line a train is on.
+drop table if exists silver.line_shape;
+create table silver.line_shape as
+select rl.line_id as id, st_simplify(st_collect(w.geom), 0.0003) as geom
+from route_line rl
+join osm.route_member m on m.relation_id = rl.route_id and m.type = 'w'
+join osm.way w on w.way_id = m.ref
+group by rl.line_id;
+alter table silver.line_shape add primary key (id);
+create index on silver.line_shape using gist (geom);
+create index if not exists line_ref on silver.line (upper(replace(ref, ' ', '')));
 
 drop table if exists silver.station;
 create table silver.station as
