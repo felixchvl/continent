@@ -16,7 +16,6 @@ import { distance, type LonLat } from '../../web/src/shared/geo.ts'
 
 const UA = 'Continent/1.0 (https://github.com/felixchvl/continent)'
 const TRAINLINE = 'https://raw.githubusercontent.com/trainline-eu/stations/master/stations.csv'
-const SPARQL = 'https://query.wikidata.org/sparql'
 const db = new pg.Pool({ host: '/var/run/postgresql', database: process.env.DB ?? 'continent', max: 2 })
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(0, 19).replace('T', ' '), ...a)
@@ -193,33 +192,33 @@ async function linkManagers(stations: Station[], info: Map<string, Info>) {
 type Article = { lang: string; title: string }
 type Page = { url: string; photo: string | null; file: string | null }
 
-/** Every Wikipedia article about each item, by language. */
+// Wikimedia projects whose site ids end in "wiki" but which are not a Wikipedia.
+const NOT_WIKIPEDIA = new Set(['commonswiki', 'specieswiki', 'metawiki', 'mediawikiwiki', 'wikidatawiki', 'sourceswiki',
+  'wikimaniawiki', 'outreachwiki', 'incubatorwiki', 'foundationwiki', 'wikifunctionswiki'])
+
+/** Every Wikipedia article about each item, by language: Wikidata's API, 50 items a request (the SPARQL
+ * service times out on so many sitelinks). */
 async function sitelinks(qids: string[]): Promise<Map<string, Article[]>> {
   const out = new Map<string, Article[]>()
-  for (const part of chunks(qids, 400)) {
-    const res = await fetch(SPARQL, {
-      method: 'POST',
-      headers: { 'User-Agent': UA, Accept: 'application/sparql-results+json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ query: `SELECT ?item ?wiki ?title WHERE {
-        VALUES ?item { ${part.map((q) => `wd:${q}`).join(' ')} }
-        ?article schema:about ?item; schema:isPartOf ?wiki; schema:name ?title.
-        ?wiki wikibase:wikiGroup "wikipedia".
-      }` }),
-      signal: AbortSignal.timeout(90_000),
-    })
-    if (!res.ok) {
-      log(`sitelinks: Wikidata ${res.status}, ${part.length} items skipped`)
-      await sleep(10_000)
+  let failed = 0
+  for (const part of chunks(qids, 50)) {
+    let j: { entities?: Record<string, { sitelinks?: Record<string, { site: string; title: string }> }> }
+    try {
+      j = (await (await get(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks&ids=${part.join('|')}`)).json()) as typeof j
+    } catch (e) {
+      failed += part.length
+      log(`sitelinks: ${(e as Error).message}`)
       continue
     }
-    const j = (await res.json()) as { results: { bindings: Record<string, { value: string }>[] } }
-    for (const b of j.results.bindings) {
-      const qid = b.item.value.slice(b.item.value.lastIndexOf('/') + 1)
-      const lang = new URL(b.wiki.value).hostname.split('.')[0]
-      out.set(qid, [...(out.get(qid) ?? []), { lang, title: b.title.value }])
+    for (const [qid, e] of Object.entries(j.entities ?? {})) {
+      const articles = Object.values(e.sitelinks ?? {})
+        .filter((l) => l.site.endsWith('wiki') && !NOT_WIKIPEDIA.has(l.site))
+        .map((l) => ({ lang: l.site.slice(0, -4).replace(/_/g, '-'), title: l.title }))
+      if (articles.length) out.set(qid, articles)
     }
-    await sleep(1000)
+    await sleep(100)
   }
+  if (failed) log(`sitelinks: ${failed} items could not be read`)
   return out
 }
 
