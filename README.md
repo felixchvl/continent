@@ -8,7 +8,10 @@ A live map of Europe's trains: Flighty and Flightradar, for rail. Web first, the
 - Every railway in Europe from OpenStreetMap, lines in their colour, then metros, trams, funiculars and
   stations with their network's logo when zoomed in; live metros and trams from zoom 12.
 - A library of the actors of European rail (operators, networks, transport authorities, infrastructure
-  managers, regions) with their logos, built every month on the server.
+  managers, regions) with their logos, built every month on the server, shown as a page of logos
+  (`?vue=bibliotheque`); the logos of a train's line and network (RER + B, S-Bahn + S1) in its tooltip
+  and sheet.
+- Stations with their names from zoom 10; the map position is kept in the address (`#zoom/lat/lon`).
 - Spain: real GPS positions from Renfe. Elsewhere: positions estimated from timetables and real-time delays,
   interpolated along the track (Transitous / MOTIS). Every train says which of the two it is.
 - Train sheet: times, delay, progress, stop timeline, route drawn on the map, camera follow, and the
@@ -42,7 +45,13 @@ npm run dev
 - from zoom 12 the app asks `/api/urbain/12/x/y` for the metros, trams and funiculars of each tile in
   view; the server asks Transitous for that tile only, keeps it 30 s and makes at most one request a second;
 - it serves the vector tiles (`/tiles/rail`, `/tiles/urbain`), the library of actors (`/api/actors`) and
-  their logos (`/logos/Q….svg`, with a sandboxing CSP since the SVGs come from Wikimedia Commons).
+  their logos (`/logos/Q….svg`, with a sandboxing CSP since the SVGs come from Wikimedia Commons);
+- `/api/train/:id` says which OpenStreetMap line the train runs on (same reference within about 2 km,
+  `silver.line_shape`), with the logos of the line and its network;
+- segments whose feed gives no shape (straight lines between stations: the French multimodal base, part
+  of Renfe Cercanías) are laid back onto the tracks: shortest path on every OpenStreetMap rail track in a
+  corridor around them, computed once per pair of stations in the background and kept in
+  `silver.segment_path` (`src/snap.ts`); the trains follow it and `/api/trip` returns it.
 
 ### Monthly OpenStreetMap pipeline
 
@@ -59,8 +68,9 @@ npm run dev
    parents, described by Wikidata (name, kinds, country, territory, parents, colour, website) with their
    logo downloaded from Commons into `/var/lib/continent/logos`; `silver.actor_name`, every operator or
    network name written in OpenStreetMap (`actors.ts`).
-5. **tiles**: `rail` (z4-11: high-speed and main lines from zoom 4, branch lines from 6) and `urbain`
-   (z9-13: metros, trams, funiculars, stations with their logo), swapped in atomically.
+5. **tiles**: tracks merged into long lines first (OSM's short ways otherwise simplify into dashes), then
+   `rail` (z4-13: high-speed and main lines from zoom 4, branch lines from 6) and `urbain` (z9-14: metros,
+   trams, funiculars, stations with their logo), unsimplified at their maximum zoom, swapped in atomically.
 
 The site is public at **https://continent.felixchevalier.fr**: DNS at Infomaniak → home public IP → the
 home Caddy (LXC 110, [`server/deploy/caddy-continent.caddy`](server/deploy/caddy-continent.caddy), installed
