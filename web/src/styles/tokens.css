@@ -25,9 +25,9 @@
   --carte-terre: #f3f3f1;
   --carte-mer: #dce4ea;
   --carte-frontiere: #bdbdbd;
-  --carte-reseau-gv: #8f8f8f;
-  --carte-reseau-classique: #b5b5b5;
-  --carte-reseau-secondaire: #d2d2d0;
+  --carte-reseau-gv: #7d7d7d;
+  --carte-reseau-classique: #a8a8a8;
+  --carte-reseau-secondaire: #c6c6c4;
   --carte-ville: #000000;
   --carte-halo: #f3f3f1;
 }
@@ -46,9 +46,9 @@
   --carte-terre: #161616;
   --carte-mer: #050505;
   --carte-frontiere: #3c3c3c;
-  --carte-reseau-gv: #6e6e6e;
-  --carte-reseau-classique: #4a4a4a;
-  --carte-reseau-secondaire: #2f2f2f;
+  --carte-reseau-gv: #7a7a7a;
+  --carte-reseau-classique: #575757;
+  --carte-reseau-secondaire: #3a3a3a;
   --carte-ville: #ffffff;
   --carte-halo: #161616;
 }

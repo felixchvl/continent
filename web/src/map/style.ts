@@ -57,9 +57,9 @@ export function buildStyle(): StyleSpecification {
         filter: ['all', ['==', ['get', 'admin_level'], 0], notMaritime, notDisputed, worldview],
         paint: { 'line-color': c('carte-frontiere'), 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 10, 1.2] },
       },
-      rail('reseau-secondaire', 'branch', 'carte-reseau-secondaire', width(0.35, 0.6, 1.2, 2.4), 6),
-      rail('reseau-principal', 'main', 'carte-reseau-classique', width(0.5, 0.9, 1.6, 3)),
-      rail('reseau-gv', 'gv', 'carte-reseau-gv', width(0.8, 1.3, 2.2, 3.6)),
+      rail('reseau-secondaire', 'branch', 'carte-reseau-secondaire', width(0.45, 0.8, 1.3, 2.4), 6),
+      rail('reseau-principal', 'main', 'carte-reseau-classique', width(0.65, 1.15, 1.8, 3)),
+      rail('reseau-gv', 'gv', 'carte-reseau-gv', width(0.95, 1.5, 2.4, 3.6)),
     ],
   }
 }
