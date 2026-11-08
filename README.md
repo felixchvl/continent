@@ -74,7 +74,7 @@ npm run dev
 5. **tiles**: tracks merged into long lines first (OSM's short ways otherwise simplify into dashes), then
    `rail` (z4-13: high-speed and main lines from zoom 4, branch lines from 6) and `urbain` (z9-14: metros,
    trams, funiculars, stations with their logo), unsimplified at their maximum zoom, swapped in atomically.
-6. **basemap**: Europe (z0-13) cut out of the latest [Protomaps](https://protomaps.com) build of
+6. **basemap**: Europe (z0-12, 6.8 GB) cut out of the latest [Protomaps](https://protomaps.com) build of
    OpenStreetMap with `pmtiles extract` into `/var/lib/continent/basemap/europe.pmtiles`; needs the
    [pmtiles](https://github.com/protomaps/go-pmtiles) command, skipped without it.
 

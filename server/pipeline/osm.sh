@@ -20,10 +20,10 @@ TILES=${TILES:-/var/lib/continent/tiles}
 DB=${DB:-continent}
 STAGES=${STAGES:-download load silver actors tiles basemap}
 BASEMAP=${BASEMAP:-/var/lib/continent/basemap/europe.pmtiles}
-# Europe as the map shows it (Iceland and the Canaries to the Caucasus), up to zoom 13: the map draws the
-# base map's few layers (water, borders, main roads) overzoomed beyond.
+# Europe as the map shows it (Iceland and the Canaries to the Caucasus), up to zoom 12 (6.8 GB; zoom 13 is
+# 14 GB, too much to swap on the server): the map draws its few layers (water, borders, roads) overzoomed beyond.
 BBOX=${BBOX:--25,27,45,72}
-BASE_MAXZOOM=${BASE_MAXZOOM:-13}
+BASE_MAXZOOM=${BASE_MAXZOOM:-12}
 UA='Continent (https://github.com/felixchvl/continent)'
 # One extract per country (Geofabrik also has overlapping ones: alps, dach, britain-and-ireland...).
 COUNTRIES=${COUNTRIES:-'albania andorra austria belarus belgium bosnia-herzegovina bulgaria croatia czech-republic

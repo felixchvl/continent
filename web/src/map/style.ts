@@ -32,9 +32,9 @@ export function buildStyle(): StyleSpecification {
   return {
     version: 8,
     sources: {
-      // Up to zoom 13, as cut out by the pipeline (BASE_MAXZOOM in server/pipeline/osm.sh).
+      // Up to zoom 12, as cut out by the pipeline (BASE_MAXZOOM in server/pipeline/osm.sh).
       base: {
-        type: 'vector', tiles: tiles('base'), maxzoom: 13,
+        type: 'vector', tiles: tiles('base'), maxzoom: 12,
         attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       },
       rail: { type: 'vector', tiles: tiles('rail'), minzoom: 4, maxzoom: 13 },
