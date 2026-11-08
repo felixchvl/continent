@@ -226,10 +226,26 @@ async function sitelinks(qids: string[]): Promise<Map<string, Article[]>> {
 const pick = (articles: Article[]) =>
   articles.find((a) => a.lang === 'fr') ?? articles.find((a) => a.lang === 'en') ?? [...articles].sort((a, b) => a.lang.localeCompare(b.lang))[0]
 
-/** The pages' address and image (Wikipedia gives freely licensed images only), 50 titles a request. */
+/** Up to 50 titles a request, and short enough an address (Cyrillic or Greek titles triple in length
+ * once encoded: Wikipedia answers 414 beyond about 8 KB). */
+function batches(titles: string[]): string[][] {
+  const out: string[][] = []
+  let part: string[] = []
+  let length = 0
+  for (const t of titles) {
+    const n = encodeURIComponent(t).length + 3
+    if (part.length && (part.length === 50 || length + n > 6000)) (out.push(part), (part = []), (length = 0))
+    part.push(t)
+    length += n
+  }
+  if (part.length) out.push(part)
+  return out
+}
+
+/** The pages' address and image (Wikipedia gives freely licensed images only). */
 async function pages(lang: string, titles: string[]): Promise<Map<string, Page>> {
   const out = new Map<string, Page>()
-  for (const part of chunks(titles, 50)) {
+  for (const part of batches(titles)) {
     const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageimages|info` +
       `&inprop=url&piprop=thumbnail|name&pithumbsize=800&titles=${encodeURIComponent(part.join('|'))}`
     let j: { query?: { normalized?: { from: string; to: string }[]; redirects?: { from: string; to: string }[]; pages?: { title: string; missing?: boolean; fullurl?: string; pageimage?: string; thumbnail?: { source: string } }[] } }
