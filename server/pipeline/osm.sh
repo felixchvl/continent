@@ -53,7 +53,7 @@ fi
 if has load; then
   log "load"
   sql -c 'create schema if not exists osm'
-  osm2pgsql --create --slim --drop --cache 300 --number-processes 2 --log-level warn \
+  osm2pgsql --create --slim --drop --cache 300 --number-processes 2 --log-level warn --log-progress false \
     --output flex --style "$HERE/rail.lua" --middle-schema osm -d "$DB" europe.osm.pbf
 fi
 
