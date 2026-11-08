@@ -122,28 +122,45 @@ function kindsOf(types: string[], labels: Map<string, string>): Kind[] {
   return kinds.length ? kinds : ['autre']
 }
 
-/** Downloads a logo from Commons unless the same file was already fetched; returns the local file name. */
+const statuses = new Map<string, number>()
+const count = (k: string) => statuses.set(k, (statuses.get(k) ?? 0) + 1)
+
+/**
+ * Downloads a logo from Commons unless the same file is already on disk; returns the local file name.
+ * Wikimedia throttles bursts (429): wait as long as it asks, or longer each time, then try again.
+ */
 async function fetchLogo(qid: string, source: string, previous: { source: string | null; file: string | null } | undefined) {
   const file = decodeURIComponent(source.slice(source.lastIndexOf('/') + 1))
-  const ext = file.toLowerCase().endsWith('.svg') ? '.svg' : file.toLowerCase().endsWith('.png') ? '.png' : file.toLowerCase().match(/\.jpe?g$/) ? '.jpg' : null
-  if (!ext) return null
+  const lower = file.toLowerCase()
+  const ext = lower.endsWith('.svg') ? '.svg' : lower.endsWith('.png') ? '.png' : /\.jpe?g$/.test(lower) ? '.jpg' : null
+  if (!ext) return (count('format'), null)
   const local = `${qid}${ext}`
-  if (previous?.source === source && previous.file === local) {
+  if (previous?.source === source) {
     try {
       await access(join(LOGOS, local))
-      return local
-    } catch { /* missing on disk: download again */ }
+      return (count('kept'), local)
+    } catch { /* not on disk yet */ }
   }
-  const res = await fetch(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}`, {
-    headers: { 'User-Agent': UA }, redirect: 'follow', signal: AbortSignal.timeout(30_000),
-  })
-  if (!res.ok) return null
-  const body = Buffer.from(await res.arrayBuffer())
-  if (body.length > 3_000_000) return null
-  await writeFile(join(LOGOS, local), body)
-  await sleep(200) // be gentle with Wikimedia
-  return local
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}`, {
+      headers: { 'User-Agent': UA }, redirect: 'follow', signal: AbortSignal.timeout(30_000),
+    })
+    if (res.status === 429 || res.status >= 500) {
+      await sleep(Number(res.headers.get('retry-after') ?? 0) * 1000 || 2000 * 2 ** attempt)
+      continue
+    }
+    if (!res.ok) return (count(String(res.status)), null)
+    const body = Buffer.from(await res.arrayBuffer())
+    if (body.length > 3_000_000) return (count('too big'), null)
+    await writeFile(join(LOGOS, local), body)
+    await sleep(500) // be gentle with Wikimedia
+    return (count('downloaded'), local)
+  }
+  return (count('throttled'), null)
 }
+
+// Logos are fetched for the actors that matter most first: organisations before lines, the most present first.
+const KIND_ORDER: Kind[] = ['exploitant', 'reseau', 'autorite', 'infrastructure', 'marque', 'collectivite', 'autre', 'ligne']
 
 async function main() {
   await mkdir(LOGOS, { recursive: true })
@@ -181,23 +198,24 @@ async function main() {
   // 3. Logos.
   const { rows: before } = await db.query<{ qid: string; logo_source: string | null; logo_file: string | null }>('select qid, logo_source, logo_file from silver.actor')
   const previous = new Map(before.map((r) => [r.qid, { source: r.logo_source, file: r.logo_file }]))
-  const done: Actor[] = []
-  let logos = 0
-  for (const a of actors.values()) {
-    if (!a.name) continue // no label at all: a deleted or merged item
-    let logo_file: string | null = null
-    if (a.logo_source) {
-      try {
-        logo_file = await fetchLogo(a.qid, a.logo_source, previous.get(a.qid))
-      } catch (e) {
-        log(`logo ${a.qid}: ${(e as Error).message}`)
-      }
-      if (logo_file) logos++
+  const weight = (q: string) => (counts.get(q)?.lines ?? 0) + (counts.get(q)?.stations ?? 0)
+  const done: Actor[] = [...actors.values()]
+    .filter((a) => a.name) // no label at all: a deleted or merged item
+    .map((a) => {
+      const kinds = kindsOf(a.types, labels)
+      return { ...a, kind: kinds[0], kinds, logo_file: null as string | null }
+    })
+    .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || weight(b.qid) - weight(a.qid))
+  for (const a of done) {
+    if (!a.logo_source) continue
+    try {
+      a.logo_file = await fetchLogo(a.qid, a.logo_source, previous.get(a.qid))
+    } catch (e) {
+      count('error')
+      log(`logo ${a.qid}: ${(e as Error).message}`)
     }
-    const kinds = kindsOf(a.types, labels)
-    done.push({ ...a, kind: kinds[0], kinds, logo_file })
   }
-  log(`${done.length} actors, ${logos} logos`)
+  log(`${done.length} actors; logos: ${[...statuses].map(([k, n]) => `${k} ${n}`).join(', ')}`)
 
   // 4. Write the library in one transaction.
   const client = await db.connect()
