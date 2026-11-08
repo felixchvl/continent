@@ -64,8 +64,12 @@ export type RGBA = [number, number, number, number]
 export function token(name: string): RGBA {
   const v = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim()
   if (v.startsWith('#')) {
-    const n = parseInt(v.slice(1), 16)
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255]
+    // The CSS minifier shortens #ffffff to #fff: expand the short forms (#rgb, #rgba) first.
+    let h = v.slice(1)
+    if (h.length <= 4) h = [...h].map((ch) => ch + ch).join('')
+    const n = parseInt(h.slice(0, 6), 16)
+    const a = h.length === 8 ? parseInt(h.slice(6, 8), 16) : 255
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, a]
   }
   const m = v.match(/rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[/,]\s*([\d.]+)(%?))?\s*\)/)
   if (!m) return [128, 128, 128, 255]
