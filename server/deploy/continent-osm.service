@@ -9,9 +9,9 @@ User=continent
 WorkingDirectory=/var/lib/continent/osm
 Environment=WORK=/var/lib/continent/osm TILES=/var/lib/continent/tiles
 ExecStart=/opt/continent/server/pipeline/osm.sh
-# Leave the CPU and the disk to the live service. osmium needs about 1.4 GB whatever the country
-# (it keeps a bitmap of every OpenStreetMap id): the container has 3 GB for that.
+# Leave the CPU and the disk to the live service. osmium needs up to about 1.9 GB whatever the country
+# (it keeps a bitmap of every OpenStreetMap id): the container has 4 GB for that.
 Nice=15
 IOSchedulingClass=idle
-MemoryMax=1800M
+MemoryMax=2600M
 TimeoutStartSec=6h
