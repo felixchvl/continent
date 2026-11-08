@@ -1,6 +1,7 @@
-// Station photos: the image of the station's Wikipedia article (a thumbnail on upload.wikimedia.org,
-// freely licensed, chosen by pipeline/stations.ts), fetched once and kept on disk, so that visitors'
-// browsers only talk to this server. New images are fetched at most 2 a second after a burst of 20.
+// Station photos: the image of the station's Wikipedia article (a thumbnail on thumb.wikimedia.org or
+// upload.wikimedia.org, freely licensed, chosen by pipeline/stations.ts), fetched once and kept on disk
+// (/var/lib/continent/photos, owned by the continent user), so that visitors' browsers only talk to this
+// server. New images are fetched at most 2 a second after a burst of 20.
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -30,20 +31,23 @@ async function download(source: string, file: string): Promise<Buffer> {
   return body
 }
 
-/** The image at this upload.wikimedia.org address, from the disk when it was fetched before. */
+const HOSTS = new Set(['thumb.wikimedia.org', 'upload.wikimedia.org'])
+
+/** The image at this Wikimedia address, from the disk when it was fetched before. */
 export async function photo(source: string): Promise<{ body: Buffer; type: string }> {
   const url = new URL(source)
-  if (url.protocol !== 'https:' || url.hostname !== 'upload.wikimedia.org') throw new Error('not a Wikimedia image')
+  if (url.protocol !== 'https:' || !HOSTS.has(url.hostname)) throw new Error('not a Wikimedia image')
+  url.search = '' // Wikipedia's API adds utm_ parameters; the image is the same without them
   const ext = (url.pathname.match(/\.([a-z]+)$/i)?.[1] ?? '').toLowerCase()
   const type = TYPES[ext]
   if (!type) throw new Error('unsupported image type')
-  const file = join(PHOTOS, `${createHash('sha1').update(source).digest('hex').slice(0, 24)}.${ext}`)
+  const file = join(PHOTOS, `${createHash('sha1').update(url.href).digest('hex').slice(0, 24)}.${ext}`)
   try {
     return { body: await readFile(file), type }
   } catch {
     let p = pending.get(file)
     if (!p) {
-      p = download(source, file).finally(() => pending.delete(file))
+      p = download(url.href, file).finally(() => pending.delete(file))
       pending.set(file, p)
     }
     return { body: await p, type }
