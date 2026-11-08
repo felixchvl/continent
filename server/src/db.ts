@@ -112,7 +112,8 @@ export async function actors(): Promise<unknown[]> {
     const { rows } = await pool.query(`
       select a.qid, a.name, a.name_fr, a.name_en, a.kind, a.kinds, a.country, a.colour, a.website, a.logo_file as logo,
              a.lines, a.stations, a.parents,
-             coalesce((select array_agg(n.name order by n.lines + n.stations desc) from silver.actor_name n where n.qid = a.qid), '{}') as aliases
+             coalesce((select array_agg(n.name order by n.lines + n.stations desc) from silver.actor_name n where n.qid = a.qid), '{}')
+               || case when a.kind <> 'ligne' then coalesce(a.names, '{}') else '{}' end as aliases -- lines' names in 50 languages are no use here
       from silver.actor a order by a.lines + a.stations desc, a.name`)
     return rows
   } catch {

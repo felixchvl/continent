@@ -24,7 +24,7 @@ const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(0, 1
 
 type Kind = 'ligne' | 'marque' | 'autorite' | 'reseau' | 'exploitant' | 'infrastructure' | 'collectivite' | 'autre'
 type Actor = {
-  qid: string; name: string; name_fr: string | null; name_en: string | null; kind: Kind; kinds: Kind[]; types: string[]
+  qid: string; name: string; name_fr: string | null; name_en: string | null; names: string[]; kind: Kind; kinds: Kind[]; types: string[]
   country: string | null; territory: string | null; parents: string[]; colour: string | null; website: string | null
   logo_source: string | null; logo_file: string | null
 }
@@ -66,6 +66,7 @@ type Row = Record<'item' | 'fr' | 'en' | 'mul' | 'logo' | 'colour' | 'cc' | 'web
 
 async function describe(qids: string[]): Promise<Map<string, Omit<Actor, 'kind' | 'kinds' | 'logo_file'>>> {
   const out = new Map<string, Omit<Actor, 'kind' | 'kinds' | 'logo_file'>>()
+  const names = await otherNames(qids)
   for (const part of chunks(qids, 250)) {
     const rows = await sparql<Row>(`SELECT ?item ?fr ?en ?mul ?logo ?colour ?cc ?website ?parent ?type ?territory WHERE {
       VALUES ?item { ${values(part)} }
@@ -84,7 +85,7 @@ async function describe(qids: string[]): Promise<Map<string, Omit<Actor, 'kind' 
       const qid = qidOf(r.item!)
       let a = out.get(qid)
       if (!a) {
-        a = { qid, name: '', name_fr: null, name_en: null, types: [], country: null, territory: null, parents: [], colour: null, website: null, logo_source: null }
+        a = { qid, name: '', name_fr: null, name_en: null, names: names.get(qid) ?? [], types: [], country: null, territory: null, parents: [], colour: null, website: null, logo_source: null }
         out.set(qid, a)
       }
       a.name_fr ??= r.fr ?? null
@@ -99,6 +100,22 @@ async function describe(qids: string[]): Promise<Map<string, Omit<Actor, 'kind' 
       if (r.type && !a.types.includes(qidOf(r.type))) a.types.push(qidOf(r.type))
     }
     log(`wikidata: ${out.size} actors described`)
+    await sleep(1000)
+  }
+  return out
+}
+
+/** Every other name of each item: labels in all languages, short names (SBB, FGC), French, English
+ * and German aliases, so that an agency named in its own language is found. */
+async function otherNames(qids: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  for (const part of chunks(qids, 200)) {
+    const rows = await sparql<{ item: string; names: string }>(`SELECT ?item (GROUP_CONCAT(DISTINCT ?n; separator="\u001f") AS ?names) WHERE {
+      VALUES ?item { ${values(part)} }
+      { ?item rdfs:label ?n } UNION { ?item wdt:P1813 ?n } UNION { ?item wdt:P1448 ?n }
+      UNION { ?item skos:altLabel ?n FILTER(LANG(?n) IN ("fr", "en", "de")) }
+    } GROUP BY ?item`)
+    for (const r of rows) out.set(qidOf(r.item), r.names.split('\u001f').filter((n) => n.length > 1 && n.length < 120))
     await sleep(1000)
   }
   return out
@@ -172,6 +189,7 @@ async function main() {
       country text, territory text, parents text[] not null, colour text, website text,
       logo_source text, logo_file text, lines int not null default 0, stations int not null default 0, updated timestamptz not null default now());
     alter table silver.actor add column if not exists kinds text[];
+    alter table silver.actor add column if not exists names text[];
     create table if not exists silver.actor_name (
       name text not null, role text not null, qid text, lines int not null, stations int not null, primary key (name, role));`)
 
@@ -227,8 +245,8 @@ async function main() {
     await client.query('truncate silver.actor, silver.actor_name')
     for (const part of chunks(done, 500)) {
       await client.query(
-        `insert into silver.actor (qid, name, name_fr, name_en, kind, kinds, types, country, territory, parents, colour, website, logo_source, logo_file, lines, stations)
-         select * from jsonb_to_recordset($1::jsonb) as x(qid text, name text, name_fr text, name_en text, kind text, kinds text[], types text[], country text,
+        `insert into silver.actor (qid, name, name_fr, name_en, names, kind, kinds, types, country, territory, parents, colour, website, logo_source, logo_file, lines, stations)
+         select * from jsonb_to_recordset($1::jsonb) as x(qid text, name text, name_fr text, name_en text, names text[], kind text, kinds text[], types text[], country text,
            territory text, parents text[], colour text, website text, logo_source text, logo_file text, lines int, stations int)`,
         [JSON.stringify(part.map((a) => ({ ...a, lines: counts.get(a.qid)?.lines ?? 0, stations: counts.get(a.qid)?.stations ?? 0 })))],
       )
