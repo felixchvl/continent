@@ -164,7 +164,7 @@ ol, ul { list-style: none; }
   background: none !important; border-color: var(--texte) !important; color: var(--texte) !important;
   font: 400 10px var(--police) !important;
 }
-.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: var(--fond) !important; color: var(--texte-2); }
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: var(--fond) !important; color: var(--texte-2) !important; }
 .maplibregl-ctrl-attrib a { color: var(--texte-2) !important; }
 :root[data-theme='sombre'] .maplibregl-ctrl-attrib-button { filter: invert(1); }
 
