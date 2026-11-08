@@ -13,6 +13,8 @@ import { FLAG_GPS, FLAG_MOVING, FLAG_RT, KINDS, type Meta, type TrainDetail } fr
 import type { Operator } from '../../web/src/shared/operators.ts'
 import { Busy, collect, tileCount, trip } from './transitous.ts'
 import { urbanTile } from './urbain.ts'
+import { encodePolyline, isStraight, loadPaths, pathFor, segmentKey } from './snap.ts'
+import { Line, decodePolyline, type LonLat } from '../../web/src/shared/geo.ts'
 import * as db from './db.ts'
 
 const PORT = Number(process.env.PORT ?? 8080)
@@ -79,6 +81,58 @@ function rebuildLive() {
   health.running = d.length / 7
 }
 
+// ---- Straight segments laid back on the tracks (snap.ts) ---------------------------------------
+
+function layOnTracks(list: Iterable<Train>) {
+  for (const t of list) {
+    for (const s of t.segs) {
+      if (!isStraight(s.line.points, s.line.length)) continue
+      const path = pathFor(segmentKey(s.from.id, s.to.id), [s.from.lon, s.from.lat], [s.to.lon, s.to.lat])
+      if (path) s.line = new Line(path)
+    }
+  }
+}
+
+/** A path just computed: the trains running on that segment now follow it. */
+function pathReady(key: string, path: LonLat[]) {
+  for (const t of trains.values()) {
+    for (const s of t.segs) if (segmentKey(s.from.id, s.to.id) === key && isStraight(s.line.points, s.line.length)) s.line = new Line(path)
+  }
+}
+
+type TripLeg = { legGeometry?: { points: string; precision?: number; length?: number }; from: Stop; to: Stop; intermediateStops?: Stop[] }
+type Stop = { stopId: string; lat: number; lon: number }
+
+/** A trip whose shape only joins its stations gets, stop to stop, the paths laid on the tracks. */
+function straightenTrip(body: string): string {
+  try {
+    const j = JSON.parse(body) as { legs?: TripLeg[] }
+    let changed = false
+    for (const leg of j.legs ?? []) {
+      const g = leg.legGeometry
+      if (!g) continue
+      const precision = g.precision ?? 6
+      const stops = [leg.from, ...(leg.intermediateStops ?? []), leg.to]
+      const points = decodePolyline(g.points, precision)
+      const line = new Line(points)
+      if (stops.length < 2 || points.length > stops.length + 2 || !isStraight(points, line.length)) continue
+      const all: LonLat[] = []
+      for (let i = 1; i < stops.length; i++) {
+        const a: LonLat = [stops[i - 1].lon, stops[i - 1].lat]
+        const b: LonLat = [stops[i].lon, stops[i].lat]
+        const path = pathFor(segmentKey(stops[i - 1].stopId, stops[i].stopId), a, b) ?? [a, b]
+        all.push(...(all.length ? path.slice(1) : path))
+      }
+      g.points = encodePolyline(all, precision)
+      g.length = all.length
+      changed = true
+    }
+    return changed ? JSON.stringify(j) : body
+  } catch {
+    return body
+  }
+}
+
 // ---- Loops ----------------------------------------------------------------------------------
 
 async function collectLoop() {
@@ -90,6 +144,7 @@ async function collectLoop() {
     })
     indexRenfeStops(segs, renfe)
     const next = buildTrains(segs)
+    layOnTracks(next.values())
     if (lastRenfe) applyRenfe(next, lastRenfe.vp, lastRenfe.tu, renfe)
     trains = next
     rebuildMeta()
@@ -246,7 +301,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     const id = url.searchParams.get('id')
     if (!id || id.length > 200) return send(res, 400, '{}', 'application/json')
     if (!seen.has(id)) return send(res, 404, '{}', 'application/json')
-    return send(res, 200, await trip(id), 'application/json', { 'Cache-Control': 'public, max-age=30' })
+    return send(res, 200, straightenTrip(await trip(id)), 'application/json', { 'Cache-Control': 'public, max-age=30' })
   }
   const urban = url.pathname.match(/^\/api\/urbain\/12\/(\d{1,4})\/(\d{1,4})$/)
   if (urban) {
@@ -280,6 +335,7 @@ const server = createServer((req, res) => {
 process.on('unhandledRejection', (e) => log('unhandled rejection:', e))
 
 await db.connect()
+await loadPaths(pathReady).catch(() => {}) // before the first collection: known paths are not computed again
 server.listen(PORT, () => log(`listening on :${PORT}, web app from ${DIST}`))
 void renfeLoop().then(collectLoop)
 setInterval(renfeLoop, 30_000)

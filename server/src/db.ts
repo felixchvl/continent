@@ -27,6 +27,8 @@ create table if not exists silver.segment (
   primary key (trip_id, from_id, sched_dep));
 create index if not exists segment_sched_dep on silver.segment (sched_dep);
 create table if not exists silver.gps_fix (num text not null, ts timestamptz not null, lon double precision, lat double precision, primary key (num, ts));
+create table if not exists silver.segment_path (
+  key text primary key, path jsonb, computed_at timestamptz not null default now());
 `
 
 let pool: pg.Pool | null = null
@@ -154,4 +156,32 @@ export async function actors(): Promise<unknown[]> {
   } catch {
     return [] // table not built yet
   }
+}
+
+/** The rail tracks (OpenStreetMap, silver.track) within `width` degrees of the straight line a-b. */
+export async function tracksNear(a: [number, number], b: [number, number], width: number): Promise<[number, number][][]> {
+  if (!pool) return []
+  const { rows } = await pool.query<{ g: string }>(`
+    with l as (select st_setsrid(st_makeline(st_point($1, $2), st_point($3, $4)), 4326) as g)
+    select st_asgeojson(t.geom, 6) as g from silver.track t, l
+    where t.c in ('gv', 'main', 'branch') and t.geom && st_expand(l.g, $5) and st_dwithin(t.geom, l.g, $5)`,
+    [a[0], a[1], b[0], b[1], width])
+  return rows.map((r) => (JSON.parse(r.g) as { coordinates: [number, number][] }).coordinates)
+}
+
+/** Paths computed for straight segments (null: none found), kept across restarts. */
+export async function loadSegmentPaths(): Promise<Map<string, [number, number][] | null>> {
+  const out = new Map<string, [number, number][] | null>()
+  if (!pool) return out
+  const { rows } = await pool.query<{ key: string; path: [number, number][] | null }>(
+    `select key, path from silver.segment_path where computed_at > now() - interval '35 days'`)
+  for (const r of rows) out.set(r.key, r.path)
+  return out
+}
+
+export async function saveSegmentPath(key: string, path: [number, number][] | null) {
+  if (!pool) return
+  await pool.query(
+    `insert into silver.segment_path (key, path) values ($1, $2) on conflict (key) do update set path = excluded.path, computed_at = now()`,
+    [key, path ? JSON.stringify(path) : null])
 }
