@@ -1,0 +1,9 @@
+[Unit]
+Description=Continent: run the OpenStreetMap pipeline on the first Sunday of each month at 03:00
+
+[Timer]
+OnCalendar=Sun *-*-01..07 03:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

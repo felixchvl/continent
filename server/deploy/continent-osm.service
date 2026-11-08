@@ -1,0 +1,16 @@
+[Unit]
+Description=Continent: monthly OpenStreetMap pipeline (rails, lines, stations, actors, tiles)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=continent
+WorkingDirectory=/var/lib/continent/osm
+Environment=WORK=/var/lib/continent/osm TILES=/var/lib/continent/tiles
+ExecStart=/opt/continent/server/pipeline/osm.sh
+# Leave the CPU and the disk to the live service.
+Nice=15
+IOSchedulingClass=idle
+MemoryMax=1000M
+TimeoutStartSec=6h

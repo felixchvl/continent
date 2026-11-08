@@ -1,0 +1,6 @@
+# osmium tags-filter expressions: everything on rails in OpenStreetMap, the lines that run on them
+# and the stations. Members of the kept relations (route ways, stop and platform nodes) come along.
+w/railway=rail,narrow_gauge,light_rail,subway,tram,monorail,funicular
+r/route=train,subway,tram,light_rail,monorail,funicular,railway
+r/route_master=train,subway,tram,light_rail,monorail,funicular
+n/railway=station,halt,tram_stop
