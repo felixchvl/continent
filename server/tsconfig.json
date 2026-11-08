@@ -11,5 +11,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "../web/src/shared"]
+  "include": ["src", "pipeline", "../web/src/shared"]
 }
