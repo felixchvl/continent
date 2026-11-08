@@ -77,7 +77,7 @@ export function token(name: string): RGBA {
   return [Number(m[1]), Number(m[2]), Number(m[3]), Math.round(a * 255)]
 }
 
-/** Same token as a CSS rgba() string, for Mapbox paint properties. */
+/** Same token as a CSS rgba() string, for the map's paint properties. */
 export function tokenCss(name: string): string {
   const [r, g, b, a] = token(name)
   return `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`

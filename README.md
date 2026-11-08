@@ -28,7 +28,6 @@ Not yet: 3D view and train models, station names and pages, statistics from the 
 ```bash
 cd web
 npm install
-echo "VITE_MAPBOX_TOKEN=pk.your_public_token" > .env.local
 npm run dev
 ```
 
@@ -95,8 +94,9 @@ the server has seen, within one Transitous request a second.
 ## Stack
 
 - React + Vite + TypeScript.
-- Mapbox GL JS for the quiet base map (style built in code from the design tokens, on our Protomaps
-  extract of OpenStreetMap), the rail network and the stations (our own OpenStreetMap vector tiles).
+- [MapLibre GL JS](https://maplibre.org) for the quiet base map (style built in code from the design
+  tokens, on our Protomaps extract of OpenStreetMap), the rail network and the stations (our own
+  OpenStreetMap vector tiles).
 - deck.gl for the trains, metros and trams, the selected route and the city names (in Halyard).
 - Plain CSS with variables (`web/src/styles/tokens.css`), light and dark.
 

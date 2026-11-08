@@ -6,7 +6,7 @@
 // lines), then metros, trams and funiculars, and the stations, from zoom 9.
 // City names are drawn by deck.gl in Halyard, like the rest of the interface.
 
-import type { FilterSpecification, Map as MapboxMap, StyleSpecification } from 'mapbox-gl'
+import type { FilterSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import { tokenCss } from '../theme'
 
 const width = (z4: number, z8: number, z12: number, z16: number) =>
@@ -31,7 +31,6 @@ export function buildStyle(): StyleSpecification {
   const tiles = (set: string) => [`${location.origin}/tiles/${set}/{z}/{x}/{y}.pbf`]
   return {
     version: 8,
-    projection: { name: 'mercator' },
     sources: {
       // Up to zoom 13, as cut out by the pipeline (BASE_MAXZOOM in server/pipeline/osm.sh).
       base: {
@@ -96,12 +95,12 @@ export function buildStyle(): StyleSpecification {
 }
 
 /** Shows or hides the rail network. */
-export function setNetworkVisible(map: MapboxMap, visible: boolean) {
+export function setNetworkVisible(map: MapLibreMap, visible: boolean) {
   for (const id of NETWORK_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none')
 }
 
 /** Recolours the map for the current theme without reloading the style. */
-export function applyTheme(map: MapboxMap) {
+export function applyTheme(map: MapLibreMap) {
   const c = tokenCss
   const set = (layer: string, prop: string, value: unknown) => {
     if (map.getLayer(layer)) map.setPaintProperty(layer, prop as never, value as never)

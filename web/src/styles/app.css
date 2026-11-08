@@ -29,7 +29,7 @@ ol, ul { list-style: none; }
 .lien { color: var(--texte); text-decoration: underline; text-underline-offset: 3px; }
 
 .app { position: relative; height: 100%; }
-.app > .carte { position: absolute; inset: 0; } /* beats mapbox-gl.css (.mapboxgl-map is relative) */
+.app > .carte { position: absolute; inset: 0; } /* beats maplibre-gl.css (.maplibregl-map is relative) */
 
 /* ---- Buttons: 1 px outline, 5 px radius; active = filled ---- */
 .bouton {
@@ -157,17 +157,16 @@ ol, ul { list-style: none; }
 .infobulle-titre { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
 .infobulle .trait-compagnie { height: 18px; }
 
-/* Mapbox controls, plain */
-.mapboxgl-ctrl-bottom-left { left: 400px !important; }
-.mapboxgl-ctrl-bottom-right { right: 60px !important; }
-.mapboxgl-ctrl-scale {
+/* Map controls, plain */
+.maplibregl-ctrl-bottom-left { left: 400px !important; }
+.maplibregl-ctrl-bottom-right { right: 60px !important; }
+.maplibregl-ctrl-scale {
   background: none !important; border-color: var(--texte) !important; color: var(--texte) !important;
   font: 400 10px var(--police) !important;
 }
-.mapboxgl-ctrl-attrib, .mapboxgl-ctrl-attrib.mapboxgl-compact { background: var(--fond) !important; color: var(--texte-2); }
-.mapboxgl-ctrl-attrib a { color: var(--texte-2) !important; }
-:root[data-theme='sombre'] .mapboxgl-ctrl-attrib-button,
-:root[data-theme='sombre'] .mapboxgl-ctrl-logo { filter: invert(1); }
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib.maplibregl-compact { background: var(--fond) !important; color: var(--texte-2); }
+.maplibregl-ctrl-attrib a { color: var(--texte-2) !important; }
+:root[data-theme='sombre'] .maplibregl-ctrl-attrib-button { filter: invert(1); }
 
 /* ---- Mobile: the map on top, the white sheet underneath (mockup iOS screens) ---- */
 @media (max-width: 760px) {
@@ -185,9 +184,9 @@ ol, ul { list-style: none; }
   .fiche-barre { padding-top: 10px; }
   .controles-haut { top: 12px; right: 12px; }
   .controles-bas { display: none; }
-  .mapboxgl-ctrl-bottom-right { display: none; }
-  .mapboxgl-ctrl-bottom-left { left: 0 !important; bottom: 250px; }
-  .avec-fiche .mapboxgl-ctrl-bottom-left { bottom: 50dvh; }
+  .maplibregl-ctrl-bottom-right { display: none; }
+  .maplibregl-ctrl-bottom-left { left: 0 !important; bottom: 250px; }
+  .avec-fiche .maplibregl-ctrl-bottom-left { bottom: 50dvh; }
 }
 
 /* ---- Library of actors: a page of logos over the map, a grid drawn with hairlines ---- */

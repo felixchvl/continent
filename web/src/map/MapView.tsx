@@ -1,11 +1,12 @@
-// The map: Mapbox GL draws the quiet base map and the rail network (OpenStreetMap tiles); deck.gl
+// The map: MapLibre GL draws the quiet base map and the rail network (OpenStreetMap tiles); deck.gl
 // draws every train in Europe as a dot in its operator's colour, the selected route and the city
 // names in Halyard.
 // Dots are moved ~15 times per second between two server updates, without re-rendering React.
 
 import { useEffect, useRef } from 'react'
-import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
+import { AttributionControl, LngLatBounds, Map as MapLibreMap, ScaleControl, setWorkerUrl, type IControl } from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import type { Layer, PickingInfo } from '@deck.gl/core'
@@ -16,6 +17,10 @@ import { hexToRgb } from '../shared/operators.ts'
 import type { LiveStore, Shown, TripDetails, TripStop } from '../data/live'
 import { URBAN_MIN_ZOOM, UrbanStore, type UrbanVehicle } from '../data/urbain'
 import type { LonLat } from '../shared/geo.ts'
+
+// MapLibre decodes tiles in a worker it looks for next to maplibre-gl.mjs, which Vite bundles away:
+// the worker is shipped as a file of its own instead.
+setWorkerUrl(workerUrl)
 
 export type Filters = { gv: boolean; cl: boolean; reg: boolean; gps: boolean; estimee: boolean; op: string | null }
 /** [lon, lat, name, minZoom, capital, priority] — see scripts/build-villes.ts */
@@ -96,15 +101,14 @@ export function MapView(props: Props) {
   const container = useRef<HTMLDivElement>(null)
   const propsRef = useRef(props)
   propsRef.current = props
-  const mapRef = useRef<mapboxgl.Map | null>(null)
+  const mapRef = useRef<MapLibreMap | null>(null)
   const paletteRef = useRef<Palette>(readPalette())
   const staticLayers = useRef<{ key: string; cities: Layer[]; placedCities: City[] }>({ key: '', cities: [], placedCities: [] })
   const userPos = useRef<LonLat | null>(null)
   const routeCache = useRef<{ id: string; t: number; along: number } | null>(null)
 
   useEffect(() => {
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN
-    const map = new mapboxgl.Map({
+    const map = new MapLibreMap({
       container: container.current!,
       style: buildStyle(),
       center: [3.2, 46.2],
@@ -112,15 +116,14 @@ export function MapView(props: Props) {
       minZoom: 2.5,
       maxZoom: 16,
       attributionControl: false,
-      projection: 'mercator',
       hash: true, // #zoom/lat/lon: a view can be shared and survives a reload
     })
     mapRef.current = map
-    map.on('error', (e) => console.error('Mapbox', e.error?.message ?? e))
+    map.on('error', (e) => console.error('MapLibre', e.error?.message ?? e))
     if (import.meta.env.DEV) Object.assign(window, { __map: map, __store: propsRef.current.store })
     map.setPadding(propsRef.current.padding)
-    map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right')
-    map.addControl(new mapboxgl.ScaleControl({ maxWidth: 96 }), 'bottom-right')
+    map.addControl(new AttributionControl({ compact: true }), 'bottom-right')
+    map.addControl(new ScaleControl({ maxWidth: 96 }), 'bottom-right')
 
     // Station logos (Q123.svg, from the library of actors) are loaded the first time a station shows
     // one, drawn on a small white plate so that they read on the dark theme too.
@@ -180,7 +183,7 @@ export function MapView(props: Props) {
         else if (info.layer?.id !== 'selection-train') propsRef.current.onSelect(null)
       },
     })
-    map.addControl(overlay)
+    map.addControl(overlay as unknown as IControl)
 
     const rebuildVisible = () => {
       const { store: s, filters: f } = propsRef.current
@@ -456,7 +459,7 @@ export function MapView(props: Props) {
         zoomBy: (d) => map.easeTo({ zoom: map.getZoom() + d, duration: 250 }),
         flyTo: (lon, lat, zoom) => map.flyTo({ center: [lon, lat], zoom: zoom ?? Math.max(map.getZoom(), 7), duration: 1200, essential: true }),
         fit: (pts) => {
-          const b = new mapboxgl.LngLatBounds()
+          const b = new LngLatBounds()
           for (const q of pts) b.extend(q)
           map.fitBounds(b, { padding: 60, duration: 1000, maxZoom: 9 })
         },
@@ -486,7 +489,7 @@ export function MapView(props: Props) {
     else map.once('load', () => applyTheme(map))
   }, [props.theme])
 
-  // The rail network is a Mapbox layer group; the network button shows or hides it.
+  // The rail network is a group of map layers; the network button shows or hides it.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
