@@ -42,7 +42,11 @@ if has download; then
     if [ -s "$out" ] && [ -n "$(find "$out" -mtime -20)" ]; then continue; fi
     log "download $name"
     curl -sSfL -A "$UA" -o "$name.full.osm.pbf" "https://download.geofabrik.de/$path-latest.osm.pbf"
-    osmium tags-filter "$name.full.osm.pbf" -e "$HERE/filter.txt" -o "$out" --overwrite --no-progress
+    # Filter into tmp/ and move into place only when done: a run killed midway (out of memory, say)
+    # must not leave a half-written country that the next run would take as complete.
+    mkdir -p tmp
+    osmium tags-filter "$name.full.osm.pbf" -e "$HERE/filter.txt" -o "tmp/$name.osm.pbf" --overwrite --no-progress
+    mv "tmp/$name.osm.pbf" "$out"
     rm -f "$name.full.osm.pbf"
   done
   log "merge"
