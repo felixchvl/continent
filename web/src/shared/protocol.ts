@@ -24,6 +24,16 @@ export type LiveRow = { i: number; lon: number; lat: number; bearing: number; mp
 
 /** The line a train runs on, found in OpenStreetMap (RER B, S1, RE2...), with the logos of the line
  * and of its network from the library of actors. */
+/** A station's sheet (/api/gare/:id): its manager, its Trainline references, its Wikipedia article and
+ * the article's image, served by the server (/api/gare/:id/photo) with its credit. */
+export type StationDetail = {
+  id: string; kind: string; name: string | null; lon: number; lat: number
+  uic: string | null; main: boolean; city: string | null
+  manager: { qid: string; name: string; logo: string | null } | null
+  wiki: { lang: string; title: string; url: string } | null
+  photo: { credit: string | null; licence: string; file: string } | null
+}
+
 export type LineInfo = { ref: string; name: string | null; colour: string | null; logo: string | null; network: string | null; networkLogo: string | null }
 
 export type TrainDetail = {

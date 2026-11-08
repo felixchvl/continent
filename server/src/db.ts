@@ -8,7 +8,7 @@ import pg from 'pg'
 import { gzipSync } from 'node:zlib'
 import type { Train } from '../../web/src/shared/model.ts'
 import type { FetchLog } from './transitous.ts'
-import type { LineInfo } from '../../web/src/shared/protocol.ts'
+import type { LineInfo, StationDetail } from '../../web/src/shared/protocol.ts'
 
 const SCHEMA = `
 create schema if not exists bronze;
@@ -139,6 +139,36 @@ export async function lineAt(trainName: string, lon: number, lat: number): Promi
   lineCache.set(key, { at: Date.now(), line })
   if (lineCache.size > 20_000) lineCache.delete(lineCache.keys().next().value!)
   return line
+}
+
+/** A station's sheet (silver.station_info, built by pipeline/stations.ts) and the address of its
+ * Wikipedia image, or null when the station is unknown. */
+export async function station(id: string): Promise<{ detail: StationDetail; photoUrl: string | null } | null> {
+  if (!pool) return null
+  try {
+    const { rows } = await pool.query(`
+      select s.id::text, s.kind, s.name, st_x(s.geom) as lon, st_y(s.geom) as lat, i.uic, coalesce(i.main, false) as main, i.city,
+             m.qid as manager_qid, m.name as manager, l.logo_file as manager_logo,
+             i.wiki_lang, i.wiki_title, i.wiki_url, i.photo, i.photo_file, i.photo_credit, i.photo_licence
+      from silver.station s
+      left join silver.station_info i on i.id = s.id
+      left join silver.actor m on m.qid = i.operator_qid
+      left join silver.actor l on l.qid = i.logo_qid
+      where s.id = $1`, [id])
+    const r = rows[0]
+    if (!r) return null
+    return {
+      photoUrl: r.photo,
+      detail: {
+        id: r.id, kind: r.kind, name: r.name, lon: r.lon, lat: r.lat, uic: r.uic, main: r.main, city: r.city,
+        manager: r.manager_qid ? { qid: r.manager_qid, name: r.manager, logo: r.manager_logo } : null,
+        wiki: r.wiki_url ? { lang: r.wiki_lang, title: r.wiki_title, url: r.wiki_url } : null,
+        photo: r.photo ? { credit: r.photo_credit, licence: r.photo_licence, file: r.photo_file } : null,
+      },
+    }
+  } catch {
+    return null // silver tables not built yet
+  }
 }
 
 /** The library of actors (silver.actor, built by pipeline/actors.ts), most present first, with the names

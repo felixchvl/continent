@@ -14,6 +14,7 @@ import type { Operator } from '../../web/src/shared/operators.ts'
 import { Busy, collect, tileCount, trip } from './transitous.ts'
 import { urbanTile } from './urbain.ts'
 import { baseTile } from './basemap.ts'
+import { photo } from './photos.ts'
 import { encodePolyline, isStraight, loadPaths, pathFor, segmentKey } from './snap.ts'
 import { Line, decodePolyline, type LonLat } from '../../web/src/shared/geo.ts'
 import * as db from './db.ts'
@@ -321,6 +322,18 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   }
   if (url.pathname === '/api/actors') {
     return send(res, 200, actorsBody, 'application/json', { 'Content-Encoding': 'gzip', 'Cache-Control': 'public, max-age=3600' })
+  }
+  const gare = url.pathname.match(/^\/api\/gare\/(\d{1,15})(\/photo)?$/)
+  if (gare) {
+    // A station's sheet, or the image of its Wikipedia article, relayed and kept by this server.
+    const st = await db.station(gare[1])
+    if (!st) return send(res, 404, '{}', 'application/json')
+    if (!gare[2]) return send(res, 200, JSON.stringify(st.detail), 'application/json', { 'Cache-Control': 'public, max-age=3600' })
+    if (!st.photoUrl) return send(res, 404, 'Not found', 'text/plain')
+    const p = await photo(st.photoUrl)
+    return send(res, 200, p.body, p.type, {
+      'Cache-Control': 'public, max-age=604800', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox",
+    })
   }
   if (url.pathname.startsWith('/api/')) return send(res, 404, '{}', 'application/json')
   const logo = url.pathname.match(LOGO_PATH)
