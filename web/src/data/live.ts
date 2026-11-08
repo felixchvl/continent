@@ -8,7 +8,7 @@ import type { Operator } from '../shared/operators.ts'
 export type { Kind, Source, Statut, TripDetails }
 export type { TripStop } from '../shared/model.ts'
 
-export type Train = { id: string; name: string; num: string; kind: Kind; op: Operator }
+export type Train = { id: string; name: string; num: string; kind: Kind; op: Operator; color: string | null }
 export type Pos = {
   lon: number
   lat: number
@@ -77,7 +77,7 @@ export class LiveStore {
 
   private async loadMeta() {
     const meta = (await (await fetch('/api/meta')).json()) as Meta
-    this.trains = meta.trains.map(([id, name, oi, ki]) => ({ id, name, num: digits(name), op: meta.ops[oi], kind: KINDS[ki] }))
+    this.trains = meta.trains.map(([id, name, oi, ki, color]) => ({ id, name, num: digits(name), op: meta.ops[oi], kind: KINDS[ki], color: color || null }))
     this.byId = new Map(this.trains.map((t, i) => [t.id, i]))
     this.version = meta.v
   }

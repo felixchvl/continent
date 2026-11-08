@@ -60,8 +60,9 @@ the server has seen, within one Transitous request a second.
 
 Swiss and minimal, after the 2024 Figma file "Continent" (iOS screens): one typeface, black on white,
 hairlines, outlined buttons, data written as sentences, and colour reserved for identity. Each train
-takes its operator's colour; only a delay is shown in red. The train sheet is a vertical timeline in
-the operator's colour.
+takes its line's official colour (GTFS `route_color` via Transitous), neutral grey when the line has
+none; operators are shown by their logos. Only a delay is shown in red. The train sheet is a vertical
+timeline in the line's colour.
 
 The typeface is Halyard Display (Darden Studio, via Adobe Fonts). It cannot be committed: in
 development the locally installed font is used (Chrome; Safari and Brave hide local fonts), and a

@@ -7,8 +7,8 @@ import type { Operator } from './operators.ts'
 
 export const KINDS: Kind[] = ['gv', 'cl', 'reg']
 
-/** [id, name, operator index, kind index] */
-export type MetaTrain = [string, string, number, number]
+/** [id, name, operator index, kind index, line colour '#rrggbb' or '' when the line has none] */
+export type MetaTrain = [string, string, number, number, string]
 export type Meta = { v: number; ops: Operator[]; trains: MetaTrain[] }
 
 /** Flat list, 7 integers per running train. */

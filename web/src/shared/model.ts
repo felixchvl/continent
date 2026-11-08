@@ -35,7 +35,8 @@ export type Gps = {
   anchor?: { seg: number; along: number }
 }
 
-export type Train = { id: string; name: string; num: string; kind: Kind; op: Operator; segs: Seg[]; gps?: Gps }
+/** color: the line's official colour (GTFS route_color via Transitous), '#rrggbb', or null when it has none. */
+export type Train = { id: string; name: string; num: string; kind: Kind; op: Operator; color: string | null; segs: Seg[]; gps?: Gps }
 
 export type Pos = {
   lon: number
@@ -68,11 +69,21 @@ export function cleanName(n: string): string {
 }
 export const digits = (s: string) => (s.match(/\d+/g) ?? []).join('')
 
+/** Neutral grey for a train or a line without an official colour. */
+export const NEUTRAL = '#8c8c8c'
+
+/** '#rrggbb' from a GTFS route_color, or null when absent or white (the GTFS default, i.e. no colour). */
+export function lineColor(c: string | undefined | null): string | null {
+  const h = (c ?? '').replace(/^#/, '').toLowerCase()
+  return /^[0-9a-f]{6}$/.test(h) && h !== 'ffffff' ? `#${h}` : null
+}
+
 // ---- Transitous segments -> trains ------------------------------------------------------------
 
 export type ApiStop = { name: string; stopId: string; lat: number; lon: number; tz?: string }
 export type ApiSeg = {
-  trips: { tripId: string; displayName?: string }[]
+  trips: { tripId: string; displayName?: string; routeShortName?: string }[]
+  routeColor?: string
   mode: string
   distance: number
   from: ApiStop
@@ -96,9 +107,10 @@ export function buildTrains(segs: Iterable<ApiSeg>, precision = 4): Map<string, 
     let t = trains.get(trip.tripId)
     if (!t) {
       const name = trip.displayName ?? ''
-      t = { id: trip.tripId, name, num: digits(name), kind, op: operatorOf(trip.tripId), segs: [] }
+      t = { id: trip.tripId, name, num: digits(name), kind, op: operatorOf(trip.tripId), color: null, segs: [] }
       trains.set(t.id, t)
     }
+    t.color ??= lineColor(s.routeColor)
     const sdep = ms(s.scheduledDeparture)
     if (t.segs.some((x) => x.from.id === s.from.stopId && x.sdep === sdep)) continue
     t.segs.push({
@@ -216,7 +228,7 @@ export function applyRenfe(trains: Map<string, Train>, vp: RenfeVP, tu: RenfeTU,
       train.gps = gps
     } else {
       const id = `renfe:${num}`
-      trains.set(id, { id, name: `Renfe ${Number(num)}`, num: String(Number(num)), kind: 'cl', op: RENFE, segs: [], gps })
+      trains.set(id, { id, name: `Renfe ${Number(num)}`, num: String(Number(num)), kind: 'cl', op: RENFE, color: null, segs: [], gps })
     }
   }
 }
@@ -237,7 +249,7 @@ export type TripStop = {
   cancelled?: boolean
 }
 
-export type TripDetails = { id: string; name: string; number: string; category: string; agency: string; stops: TripStop[]; line: Line; rt: boolean }
+export type TripDetails = { id: string; name: string; number: string; category: string; agency: string; color: string | null; stops: TripStop[]; line: Line; rt: boolean }
 
 type ApiTripStop = ApiStop & {
   arrival?: string; scheduledArrival?: string; departure?: string; scheduledDeparture?: string; track?: string; cancelled?: boolean
@@ -259,6 +271,7 @@ export function parseTrip(j: any, id: string): TripDetails {
     id, name, number,
     category: name.replace(number, '').trim(),
     agency: leg.agencyName ?? '',
+    color: lineColor(leg.routeColor),
     stops,
     line: new Line(decodePolyline(leg.legGeometry.points, leg.legGeometry.precision ?? 6)),
     rt: !!leg.realTime,

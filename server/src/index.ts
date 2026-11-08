@@ -54,7 +54,7 @@ function rebuildMeta() {
       oi = ops.push(t.op) - 1
       opIndex.set(t.op.id, oi)
     }
-    return [t.id, t.name, oi, KINDS.indexOf(t.kind)]
+    return [t.id, t.name, oi, KINDS.indexOf(t.kind), t.color ?? '']
   })
   version++
   const meta: Meta = { v: version, ops, trains: rows as Meta['trains'] }

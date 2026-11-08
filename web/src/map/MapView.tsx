@@ -14,6 +14,7 @@ import { token, type RGBA, type Theme } from '../theme'
 import { FLAG_GPS } from '../shared/protocol.ts'
 import { hexToRgb } from '../shared/operators.ts'
 import type { LiveStore, Shown, TripDetails, TripStop } from '../data/live'
+import { NEUTRAL } from '../shared/model.ts'
 import type { LonLat } from '../shared/geo.ts'
 
 export type Filters = { gv: boolean; cl: boolean; reg: boolean; gps: boolean; estimee: boolean; op: string | null }
@@ -159,7 +160,7 @@ export function MapView(props: Props) {
       vis.gps = []
       for (let k = 0; k < n; k++) {
         const t = s.trains[s.idx[rows[k]]]
-        const [r, g, b] = rgb(t.op.color)
+        const [r, g, b] = rgb(t.color ?? NEUTRAL)
         vis.colors.set([r, g, b, 255], k * 4)
         vis.radii[k] = RADIUS[t.kind]
         if (s.flags[rows[k]] & FLAG_GPS) vis.gps.push(k)
@@ -250,7 +251,7 @@ export function MapView(props: Props) {
 
       if (p.trip && selected) {
         const line = p.trip.line
-        const color = rgb(selected.train.op.color)
+        const color = rgb(p.trip.color ?? selected.train.color ?? NEUTRAL)
         let c = routeCache.current
         if (!c || c.id !== p.trip.id || t - c.t > 500) {
           c = { id: p.trip.id, t, along: line.project([selected.pos.lon, selected.pos.lat]).along }
@@ -301,7 +302,7 @@ export function MapView(props: Props) {
         }),
       )
       if (selected) {
-        const c = rgb(selected.train.op.color)
+        const c = rgb(p.trip?.color ?? selected.train.color ?? NEUTRAL)
         const sel = [selected]
         const at = (d: Shown) => [d.pos.lon, d.pos.lat] as [number, number]
         layers.push(

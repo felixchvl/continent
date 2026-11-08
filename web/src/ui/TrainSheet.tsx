@@ -3,6 +3,7 @@
 
 import type { CSSProperties } from 'react'
 import type { Shown, TripDetails, TripStop } from '../data/live'
+import { NEUTRAL } from '../shared/model.ts'
 import type { Operator } from '../shared/operators.ts'
 import { duree, heure, jour } from '../lib/format'
 import { Icon } from './Icon'
@@ -44,7 +45,7 @@ function Detail({ stop, end, first, last }: { stop: TripStop; end: 'arr' | 'dep'
 export function TrainSheet(p: Props) {
   const { live, trip, now } = p
   const op = p.operator
-  const color = op?.color ?? 'var(--texte)'
+  const color = p.trip?.color ?? p.live?.train.color ?? NEUTRAL // the line's colour, as on the map
   const name = trip?.name || live?.train.name || 'Train'
   const stops = trip?.stops ?? []
   const first = stops[0]
